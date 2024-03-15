@@ -8,11 +8,11 @@ from sklearn.cluster import DBSCAN
 class Perception(Node):
     def __init__(self):
         super().__init__('perception')
-        self.subscription = self.create_subscription(LaserScan, 'laser_scan', self.laser_scan_callback, 10)
+        self.subscription = self.create_subscription(LaserScan, 'scan', self.laser_scan_callback, 10)
         self.occupancy_grid = None
         self.resolution = 0.1  # meters per pixel
-        self.map_width = 12  # in meters
-        self.map_height = 12  # in meters
+        self.map_width = 20  # in meters
+        self.map_height = 20  # in meters
         self.grid_width = int(self.map_width / self.resolution)
         self.grid_height = int(self.map_height / self.resolution)
 
@@ -49,11 +49,28 @@ class Perception(Node):
         n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
         print(f'Number of clusters found: {n_clusters}')
 
+        # Log information about each cluster
         for i in range(n_clusters):
-            print(f'Cluster {i+1}: {np.sum(labels == i)} points')
+            centroid = np.mean(occupied_coords[labels == i], axis=0)
+            max_distance = np.max(np.linalg.norm(occupied_coords[labels == i] - centroid, axis=1))
+            size = max_distance * 2
+            self.get_logger().info(f'Cluster {i+1}: centroid=({centroid[0]:.2f}, {centroid[1]:.2f}), size={size:.2f} m')
 
-        # Here you might want to process each cluster separately
-        # For example, extracting cluster centroids, shapes, sizes, etc.
+        # Visualize the occupancy grid and the clusters in the same plot
+        plt.figure(figsize=(10, 5))
+        plt.subplot(121)
+        plt.imshow(self.occupancy_grid, cmap='gray', origin='lower')
+        plt.title('Occupancy Grid')
+        plt.subplot(122)
+        plt.imshow(self.occupancy_grid, cmap='gray', origin='lower')
+        for i in range(n_clusters):
+            plt.plot(occupied_coords[labels == i][:, 1], occupied_coords[labels == i][:, 0], 'o')
+        plt.title('Clusters')
+        plt.show()
+            
+
+
+            
 
 def main(args=None):
     rclpy.init(args=args)
