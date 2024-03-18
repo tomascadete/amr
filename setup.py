@@ -20,7 +20,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'perception = amr_sim.perception:main'
+            'perception = amr_sim.perception:main',
+            'tracker = amr_sim.tracker:main',
+            'control = amr_sim.control:main'
         ],
     },
 )
