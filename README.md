@@ -5,3 +5,4 @@ Requirements:
 * [ROS2 Humble](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debians.html)
 * [Gazebo Classic 11.0](https://classic.gazebosim.org/tutorials?tut=install_ubuntu&cat=install)
 * For now, simulation based on Black Coffee Robotics' [bcr_bot](https://github.com/blackcoffeerobotics/bcr_bot)
+
