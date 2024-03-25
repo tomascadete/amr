@@ -19,8 +19,9 @@ class RobotControl(Node):
         self.timer = self.create_timer(1, self.publish_state_and_move)
 
         # Initialize the robot's speed and orientation
-        self.speed = 0.0  # m/s
-        self.orientation = 0.0  # radians
+        self.speed = 0.1  # m/s
+        # Set orientation to turn maximum right
+        self.orientation = pi/2  # radians
 
     def publish_state_and_move(self):
         # Publish the robot's state
