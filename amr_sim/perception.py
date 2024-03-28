@@ -42,7 +42,15 @@ class ImageSubscriber(Node):
         
         self.subscription  # prevent unused variable warning
         self.bridge = CvBridge()
-        self.robot_pose = None
+        default_pose = Odometry()
+        default_pose.pose.pose.position.x = 0.0
+        default_pose.pose.pose.position.y = 0.0
+        default_pose.pose.pose.position.z = 0.0
+        default_pose.pose.pose.orientation.x = 0.0
+        default_pose.pose.pose.orientation.y = 0.0
+        default_pose.pose.pose.orientation.z = 0.0
+        default_pose.pose.pose.orientation.w = 1.0
+        self.robot_pose = default_pose.pose.pose
         self.depth_map = None
 
 
@@ -65,51 +73,55 @@ class ImageSubscriber(Node):
             # Perform object detection using the YOLOv5s model
             results = model(cv_image)
 
-            # For each detected object, go to the point cloud data and extract the 3D coordinates
-            for obj in results.xyxy[0]:
-                x1, y1, x2, y2 = obj[:4]
-                centroid_x = (x1 + x2) / 2
-                centroid_y = (y1 + y2) / 2
-                # Log the centroid coordinates
-                # self.get_logger().info(f'Centroid at ({centroid_x}, {centroid_y})')
+            # Get the robot's position and orientation
+            x_robot = self.robot_pose.position.x
+            y_robot = self.robot_pose.position.y
+            z_robot = self.robot_pose.position.z
+            qx = self.robot_pose.orientation.x
+            qy = self.robot_pose.orientation.y
+            qz = self.robot_pose.orientation.z
+            qw = self.robot_pose.orientation.w
+            # Convert the quaternion to Euler angles 
+            yaw, pitch, roll = t3d.euler.quat2euler([qx, qy, qz, qw], axes='sxyz')
+            # Log the robot's position
+            # self.get_logger().info(f'Robot position: ({x_robot}, {y_robot}, {z_robot})')
+            # Log yaw pitch and roll
+            # self.get_logger().info(f'Yaw: {yaw}, Pitch: {pitch}, Roll: {roll}')
 
-                # Extract the 3D coordinates of the object from the depth image
-                depth = self.depth_map[int(centroid_y), int(centroid_x)]
-                # Log the depth value
-                # self.get_logger().info(f'Depth value: {depth}')
 
-                # Using the depth value and the camera intrinsics, calculate the 3D coordinates of the detected object
-                x_local = (centroid_x - cx) * depth / fx
-                y_local = (centroid_y - cy) * depth / fy
-                z_local = depth
-                # TODO: The above calculation is incorrect. X and Z seem to be swapped.
+            # For each detected object, calculate its global coordinates
+            for *xyxy, conf, cls in results.xyxy[0]:
+                # Extract bb coordinates
+                x1, y1, x2, y2 = map(int, xyxy)
+                # Get class name
+                class_name = results.names[int(cls)]
+                # Calculate the center of the bounding box
+                center_x = (x1 + x2) / 2
+                center_y = (y1 + y2) / 2
+                # Get the distance to the object at the center of the bounding box
+                depth = self.depth_map[int(center_y), int(center_x)]
 
-                # Log the local coordinates
-                self.get_logger().info(f'Local coordinates of the object: ({x_local}, {y_local}, {z_local})')
+                # Get the local coordinates of the object in the camera frame
+                x_camera = (center_x - cx) * depth / fx
+                y_camera = (center_y - cy) * depth / fy
+                z_camera = depth
 
-                # Robot's current position
-                px, py, pz = self.robot_pose.position.x, self.robot_pose.position.y, self.robot_pose.position.z
-                # Robot's current orientation in quaternion format
-                quaternion = (
-                    self.robot_pose.orientation.x,
-                    self.robot_pose.orientation.y,
-                    self.robot_pose.orientation.z,
-                    self.robot_pose.orientation.w
-                )
+                # Get the local coordinates of the object in the robot frame
+                x_robot_base = z_camera
+                y_robot_base = -x_camera
+                z_robot_base = -y_camera
 
-                # Convert quaternion to rotation matrix
-                R = t3d.quaternions.quat2mat(quaternion)
+                # Log the local coordinates of the object in the robot frame
+                # self.get_logger().info(f'Local coordinates of {class_name} in the robot frame: ({x_robot_base}, {y_robot_base}, {z_robot_base})')
 
-                # Apply the rotation matrix to the local coordinates
-                global_coords_rotated = np.dot(R, np.array([x_local, y_local, z_local]))
+                # Transform the local coordinates of the object in the robot frame to the world frame
+                x_world = x_robot + np.cos(yaw) * x_robot_base - np.sin(yaw) * y_robot_base
+                y_world = y_robot + np.sin(yaw) * x_robot_base + np.cos(yaw) * y_robot_base
+                z_world = z_robot + z_robot_base
 
-                # Apply the translation to the rotated coordinates
-                global_coords = global_coords_rotated + np.array([px, py, pz])
-
-                # Log the global coordinates
-                self.get_logger().info(f'Global coordinates of the object: {global_coords}')
-
-                # TODO: Publish a custom message with the global coordinates of the detected object along with the class name.
+                # Log the global coordinates of the object
+                self.get_logger().info(f'Global coordinates of {class_name}: ({x_world}, {y_world}, {z_world})')
+                    
 
 
             # Draw bounding boxes and labels on the image
