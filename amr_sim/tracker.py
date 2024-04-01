@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from amr_interfaces.msg import Object
+from amr_interfaces.msg import Object, ObstacleArray
 import numpy as np
 
 class TrackedObject:
@@ -19,10 +19,12 @@ class ObjectTracker(Node):
             '/detections',
             self.detection_callback,
             10)
+        self.publisher = self.create_publisher(ObstacleArray, '/tracked_objects', 10)
         self.tracked_objects = []
         self.next_id = 1
         self.max_steps_missing = 10
         self.min_update_distance = 0.1  # Minimum distance to consider an update valid, in meters
+
 
     def detection_callback(self, msg):
         detected_position = np.array([msg.x, msg.y])  # Use only x and y
@@ -60,6 +62,20 @@ class ObjectTracker(Node):
         self.tracked_objects = [obj for obj in self.tracked_objects if obj.steps_since_last_seen < self.max_steps_missing]
         for obj in self.tracked_objects:
             obj.steps_since_last_seen += 1
+
+        # Publish the latest position of the tracked objects
+        self.publish_tracked_objects()
+
+    def publish_tracked_objects(self):
+        msg = ObstacleArray()
+        for tracked_object in self.tracked_objects:
+            obstacle = Object()
+            obstacle.type = tracked_object.type
+            # Publish the last known position
+            obstacle.x = tracked_object.positions[-1][0]
+            obstacle.y = tracked_object.positions[-1][1]
+            msg.obstacles.append(obstacle)
+        self.publisher.publish(msg)
 
 def main(args=None):
     rclpy.init(args=args)
