@@ -22,7 +22,8 @@ setup(
         'console_scripts': [
             'perception = amr_sim.perception:main',
             'tracker = amr_sim.tracker:main',
-            'control = amr_sim.control:main'
+            'control = amr_sim.control:main',
+            'planner = amr_sim.planner:main'
         ],
     },
 )
