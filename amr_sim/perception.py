@@ -8,6 +8,9 @@ from cv_bridge import CvBridge, CvBridgeError
 import torch
 import numpy as np
 import transforms3d as t3d
+from amr_interfaces.msg import Object
+
+
 
 
 # Load the YOLOv8s PyTorch model (file called yolo5s.pt)
@@ -40,6 +43,8 @@ class ImageSubscriber(Node):
             self.odom_callback,
             10)
         
+        self.publisher = self.create_publisher(Object, '/detections', 10)
+
         self.subscription  # prevent unused variable warning
         self.bridge = CvBridge()
         default_pose = Odometry()
@@ -70,6 +75,10 @@ class ImageSubscriber(Node):
             # Convert the ROS Image message to OpenCV format
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
+            # Check if the depth map has been received
+            if self.depth_map is None:
+                return
+
             # Perform object detection using the YOLOv5s model
             results = model(cv_image)
 
@@ -87,6 +96,8 @@ class ImageSubscriber(Node):
             # self.get_logger().info(f'Robot position: ({x_robot}, {y_robot}, {z_robot})')
             # Log yaw pitch and roll
             # self.get_logger().info(f'Yaw: {yaw}, Pitch: {pitch}, Roll: {roll}')
+            
+
 
 
             # For each detected object, calculate its global coordinates
@@ -120,8 +131,18 @@ class ImageSubscriber(Node):
                 z_world = z_robot + z_robot_base
 
                 # Log the global coordinates of the object
-                self.get_logger().info(f'Global coordinates of {class_name}: ({x_world}, {y_world}, {z_world})')
-                    
+                #self.get_logger().info(f'Global coordinates of {class_name}: ({x_world}, {y_world}, {z_world})')
+
+                # Create an Object message
+                object_msg = Object()
+                object_msg.type = class_name
+                object_msg.x = x_world
+                object_msg.y = y_world
+                object_msg.z = z_world
+
+                # Publish the Object message to the /detections topic
+                self.publisher.publish(object_msg)
+                
 
 
             # Draw bounding boxes and labels on the image
@@ -136,7 +157,7 @@ class ImageSubscriber(Node):
                 cv2.putText(cv_image, f'{class_name} {conf:.2f}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
             # Log information about detected objects
-            self.get_logger().info(f'Detected {len(results.xyxy[0])} objects')
+            # self.get_logger().info(f'Detected {len(results.xyxy[0])} objects')
 
             # Display the image
             cv2.imshow("Kinect Camera Image", cv_image)

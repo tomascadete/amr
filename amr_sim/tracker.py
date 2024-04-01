@@ -1,55 +1,71 @@
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
-import json
+from amr_interfaces.msg import Object
 import numpy as np
-from collections import defaultdict
 
-class Tracker(Node):
+class TrackedObject:
+    def __init__(self, object_id, object_type, position):
+        self.id = object_id
+        self.type = object_type
+        # Store only x and y from the position
+        self.positions = [position[:2]]  # Keep x and y, discard z
+        self.steps_since_last_seen = 0
+
+class ObjectTracker(Node):
     def __init__(self):
-        super().__init__('tracker')
+        super().__init__('object_tracker')
         self.subscription = self.create_subscription(
-            String,
-            '/detected_objects_with_id',
-            self.object_callback,
+            Object,
+            '/detections',
+            self.detection_callback,
             10)
-        self.prev_positions = defaultdict(lambda: None)
-        self.velocities = defaultdict(lambda: np.array([0.0, 0.0]))
+        self.tracked_objects = []
+        self.next_id = 1
+        self.max_steps_missing = 10
+        self.min_update_distance = 0.1  # Minimum distance to consider an update valid, in meters
 
-    def object_callback(self, msg):
-        # Parse the JSON string
-        detected_objects = json.loads(msg.data)
-        current_positions = {}
-        for obj in detected_objects:
-            obj_id = obj["id"]
-            centroid = np.array(obj["centroid"])
-            current_positions[obj_id] = centroid
-            
-            # Check if we have a previous position for this object
-            if obj_id in self.prev_positions and self.prev_positions[obj_id] is not None:
-                # Calculate velocity based on the change in position
-                velocity = centroid - self.prev_positions[obj_id]
-                self.velocities[obj_id] = velocity
-                # Log current position and velocity
-                self.get_logger().info(f'Object ID: {obj_id}, Position: {centroid.tolist()}, Velocity: {velocity.tolist()}')
-            else:
-                # This is a new object we haven't seen before
-                self.velocities[obj_id] = np.array([0.0, 0.0])
-                self.get_logger().info(f'Object ID: {obj_id}, Position: {centroid.tolist()}, Velocity: [0.0, 0.0]')
-            
-            # Predict future position using the current velocity
-            future_position = centroid + self.velocities[obj_id]
-            self.get_logger().info(f'Predicted future position for Object ID {obj_id}: {future_position.tolist()}')
-        
-        # Update the dictionary of previous positions
-        self.prev_positions = current_positions
+    def detection_callback(self, msg):
+        detected_position = np.array([msg.x, msg.y])  # Use only x and y
+        detected_type = msg.type  # The type of the detected object
+        matched = False
 
+        # Attempt to match the detected object to an existing tracked object
+        for tracked_object in self.tracked_objects:
+            if tracked_object.type == detected_type:  # Check if types match
+                last_known_position = np.array(tracked_object.positions[-1])
+                distance = np.linalg.norm(detected_position - last_known_position)
+
+                # Check if the detected object matches and the distance exceeds the minimum update distance
+                if distance < 1.0 and distance > self.min_update_distance:  # Threshold for matching, adjust as necessary
+                    # Update the object's position only if the change is significant
+                    tracked_object.positions.append(detected_position.tolist())
+                    tracked_object.steps_since_last_seen = 0
+                    matched = True
+                    self.get_logger().info(f'Updated tracked object ID {tracked_object.id} with significant position change.')
+                    break
+                elif distance <= self.min_update_distance:
+                    # Detected change is too small, likely noise, so don't update the position but reset the missing counter
+                    tracked_object.steps_since_last_seen = 0
+                    matched = True
+                    break
+
+        # If no match was found, start tracking a new object
+        if not matched:
+            new_tracked_object = TrackedObject(self.next_id, detected_type, detected_position.tolist())
+            self.tracked_objects.append(new_tracked_object)
+            self.get_logger().info(f'Started tracking new object ID {self.next_id} (Type: {detected_type}).')
+            self.next_id += 1
+
+        # Increment steps_since_last_seen for all tracked objects and remove any that exceed the limit
+        self.tracked_objects = [obj for obj in self.tracked_objects if obj.steps_since_last_seen < self.max_steps_missing]
+        for obj in self.tracked_objects:
+            obj.steps_since_last_seen += 1
 
 def main(args=None):
     rclpy.init(args=args)
-    tracker = Tracker()
-    rclpy.spin(tracker)
-    tracker.destroy_node()
+    object_tracker = ObjectTracker()
+    rclpy.spin(object_tracker)
+    object_tracker.destroy_node()
     rclpy.shutdown()
 
 if __name__ == '__main__':
