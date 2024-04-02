@@ -19,7 +19,7 @@ class Planner(Node):
             self.odom_callback,
             10)
         self.cmd_vel_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
-        self.goal = [10.0, 0.0]  # Goal position
+        self.goal = [20.0, 0.0]  # Goal position
         self.robot_pose = [0.0, 0.0]
         self.obstacles = None
 
@@ -35,8 +35,8 @@ class Planner(Node):
     def plan_path(self):
         if self.obstacles is not None:
             # Constants for attractive and repulsive forces
-            zeta = 1.0      # Scaling factor for the attractive force
-            eta = 100.0     # Scaling factor for repulsive forces
+            zeta = 100.0      # Scaling factor for the attractive force
+            eta = 50.0    # Scaling factor for repulsive forces
             Q_max = 10.0     # Influence range of the obstacles, in meters
 
             # Convert goal and robot positions to numpy arrays for vectorized operations
@@ -72,7 +72,7 @@ class Planner(Node):
             self.get_logger().info(f'Total force vector: {F_total}')
 
             linear_speed_limit = 0.5 # Limit the linear speed to 1 m/s 
-            angular_speed_limit = 1.0 # Limit the angular speed to 1 rad/s
+            angular_speed_limit = 0.5 # Limit the angular speed to 1 rad/s
 
             # Convert F_total to linear and angular velocities
             linear_speed = np.linalg.norm(F_total)
