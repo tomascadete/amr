@@ -35,7 +35,7 @@ class Planner(Node):
     def plan_path(self):
         if self.obstacles is not None:
             # Constants for attractive and repulsive forces
-            zeta = 100.0      # Scaling factor for the attractive force
+            zeta = 1.0      # Scaling factor for the attractive force
             eta = 50.0    # Scaling factor for repulsive forces
             Q_max = 10.0     # Influence range of the obstacles, in meters
 
@@ -71,8 +71,8 @@ class Planner(Node):
             # Log the total force vector
             self.get_logger().info(f'Total force vector: {F_total}')
 
-            linear_speed_limit = 0.5 # Limit the linear speed to 1 m/s 
-            angular_speed_limit = 0.5 # Limit the angular speed to 1 rad/s
+            linear_speed_limit = 0.5 # Limit the linear speed to 0.5 m/s
+            angular_speed_limit = 0.5 # Limit the angular speed to 0.5 rad/s
 
             # Convert F_total to linear and angular velocities
             linear_speed = np.linalg.norm(F_total)
