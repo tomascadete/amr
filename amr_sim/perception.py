@@ -143,13 +143,13 @@ class ImageSubscriber(Node):
                 # Publish the Object message to the /detections topic
                 self.publisher.publish(object_msg)
 
-            # If no objects are detected, publish an Object messange with Inf values
+            # If no objects are detected, publish an Object message with type 'None'
             if len(results.xyxy[0]) == 0:
                 object_msg = Object()
                 object_msg.type = 'None'
-                object_msg.x = np.inf
-                object_msg.y = np.inf
-                object_msg.z = np.inf
+                object_msg.x = 0.0
+                object_msg.y = 0.0
+                object_msg.z = 0.0
                 self.publisher.publish(object_msg)
                 
 

@@ -23,7 +23,7 @@ class ObjectTracker(Node):
         self.tracked_objects = []
         self.next_id = 1
         # Max steps missing should be large enough to account for occlusions
-        self.max_steps_missing = 200
+        self.max_steps_missing = 10
         self.min_update_distance = 0.1  # Minimum distance to consider an update valid, in meters
 
 
@@ -31,18 +31,6 @@ class ObjectTracker(Node):
         detected_position = np.array([msg.x, msg.y])  # Use only x and y
         detected_type = msg.type  # The type of the detected object
         matched = False
-
-        # If the incoming detection has values np.Inf, it means perception didn't detect anything
-        # In this case, we publish that an ObstacleArray with just that Object
-        if np.isinf(detected_position).any():
-            msg = ObstacleArray()
-            obstacle = Object()
-            obstacle.type = detected_type
-            obstacle.x = np.inf
-            obstacle.y = np.inf
-            msg.obstacles.append(obstacle)
-            self.publisher.publish(msg)
-            return
         
 
         # Attempt to match the detected object to an existing tracked object
@@ -66,7 +54,7 @@ class ObjectTracker(Node):
                     break
 
         # If no match was found, start tracking a new object
-        if not matched:
+        if not matched and detected_type != 'None':
             new_tracked_object = TrackedObject(self.next_id, detected_type, detected_position.tolist())
             self.tracked_objects.append(new_tracked_object)
             self.get_logger().info(f'Started tracking new object ID {self.next_id} (Type: {detected_type}).')
@@ -90,6 +78,7 @@ class ObjectTracker(Node):
             obstacle.y = tracked_object.positions[-1][1]
             msg.obstacles.append(obstacle)
         self.publisher.publish(msg)
+        # If no objects are being tracked and the for loop above doesn't run, the message will be empty
 
 def main(args=None):
     rclpy.init(args=args)
