@@ -49,7 +49,7 @@ class Planner(Node):
         # Constants for potential field calculation
         attractive_scale = 1.0
         repulsive_scale = 100.0
-        repulsive_threshold = 20.0
+        repulsive_threshold = 5.0
 
         def attractive_potential(x, y):
             return 0.5 * attractive_scale * np.linalg.norm(np.array([x, y]) - np.array(self.goal))**2

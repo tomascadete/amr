@@ -23,7 +23,7 @@ class ObjectTracker(Node):
         self.tracked_objects = []
         self.next_id = 1
         # Max steps missing should be large enough to account for occlusions
-        self.max_steps_missing = 10
+        self.max_steps_missing = 20  # Number of steps to keep tracking an object without updates
         self.min_update_distance = 0.1  # Minimum distance to consider an update valid, in meters
 
 
