@@ -77,6 +77,8 @@ class ObjectTracker(Node):
             obstacle.x = tracked_object.positions[-1][0]
             obstacle.y = tracked_object.positions[-1][1]
             msg.obstacles.append(obstacle)
+        # Log the ammount of tracked objects
+        self.get_logger().info(f'Tracked object count: {len(self.tracked_objects)}')
         self.publisher.publish(msg)
         # If no objects are being tracked and the for loop above doesn't run, the message will be empty
 
