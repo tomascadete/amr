@@ -23,9 +23,9 @@ class Controller(Node):
         self.robot_pose = None
 
     def path_callback(self, msg):
-        self.get_logger().info('Received new path')
+        # self.get_logger().info('Received new path')
         self.current_path = msg
-        self.current_target_index = 0  # Reset target index whenever a new path is received
+        self.current_target_index = 2  # Reset target index whenever a new path is received
 
     def odom_callback(self, msg):
         self.robot_pose = [msg.pose.pose.position.x, msg.pose.pose.position.y]
@@ -50,7 +50,7 @@ class Controller(Node):
         if distance < 0.1:
             self.current_target_index += 1
             if self.current_target_index >= len(self.current_path.poses):
-                self.get_logger().info('Reached the goal')
+                # self.get_logger().info('Reached the goal')
                 return
             target_pose = self.current_path.poses[self.current_target_index].pose
             target_position = [target_pose.position.x, target_pose.position.y]
@@ -68,7 +68,7 @@ class Controller(Node):
         cmd_vel.linear.x = linear_velocity
         cmd_vel.angular.z = angular_velocity
         self.cmd_vel_publisher.publish(cmd_vel)
-        self.get_logger().info(f'Linear Velocity: {linear_velocity}, Angular Velocity: {angular_velocity}')
+        # self.get_logger().info(f'Linear Velocity: {linear_velocity}, Angular Velocity: {angular_velocity}')
 
 
 def main(args=None):

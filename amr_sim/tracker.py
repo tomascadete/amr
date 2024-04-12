@@ -23,7 +23,7 @@ class ObjectTracker(Node):
         self.tracked_objects = []
         self.next_id = 1
         # Max steps missing should be large enough to account for occlusions
-        self.max_steps_missing = 20  # Number of steps to keep tracking an object without updates
+        self.max_steps_missing = 200  # Number of steps to keep tracking an object without updates
         self.min_update_distance = 0.1  # Minimum distance to consider an update valid, in meters
 
 
@@ -45,7 +45,8 @@ class ObjectTracker(Node):
                     tracked_object.positions.append(detected_position.tolist())
                     tracked_object.steps_since_last_seen = 0
                     matched = True
-                    self.get_logger().info(f'Updated tracked object ID {tracked_object.id} with significant position change.')
+                    # self.get_logger().info(f'Updated tracked object ID {tracked_object.id} with significant position change.')
+                    self.publish_tracked_objects()
                     break
                 elif distance <= self.min_update_distance:
                     # Detected change is too small, likely noise, so don't update the position but reset the missing counter
@@ -59,14 +60,15 @@ class ObjectTracker(Node):
             self.tracked_objects.append(new_tracked_object)
             self.get_logger().info(f'Started tracking new object ID {self.next_id} (Type: {detected_type}).')
             self.next_id += 1
+            self.publish_tracked_objects()
 
         # Increment steps_since_last_seen for all tracked objects and remove any that exceed the limit
         self.tracked_objects = [obj for obj in self.tracked_objects if obj.steps_since_last_seen < self.max_steps_missing]
         for obj in self.tracked_objects:
             obj.steps_since_last_seen += 1
 
-        # Publish the latest position of the tracked objects
-        self.publish_tracked_objects()
+
+
 
     def publish_tracked_objects(self):
         msg = ObstacleArray()
@@ -78,7 +80,7 @@ class ObjectTracker(Node):
             obstacle.y = tracked_object.positions[-1][1]
             msg.obstacles.append(obstacle)
         # Log the ammount of tracked objects
-        self.get_logger().info(f'Tracked object count: {len(self.tracked_objects)}')
+        # self.get_logger().info(f'Tracked object count: {len(self.tracked_objects)}')
         self.publisher.publish(msg)
         # If no objects are being tracked and the for loop above doesn't run, the message will be empty
 
