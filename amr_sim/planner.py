@@ -36,31 +36,9 @@ class Planner(Node):
             if 0 <= ox < self.grid_size and 0 <= oy < self.grid_size:
                 self.grid[ox-10:ox+11, oy-10:oy+11] = 1  # Circle radius on grid
 
-        # Log the amount of obstacles
-        self.get_logger().info(f'Found {len(self.obstacles)} obstacles')
-
-        # Visualization setup
-        plt.ion()  # Turn on interactive mode
-        if not hasattr(self, 'fig'):
-            self.fig, self.ax = plt.subplots(figsize=(10, 10))
-            self.image = self.ax.imshow(self.grid.T, origin='lower', extent=(-25, 25, -25, 25), cmap='Greys')
-            self.robot_scatter = self.ax.scatter(self.robot_pose[0], self.robot_pose[1], c='b', label='Robot Position')
-            self.goal_scatter = self.ax.scatter(self.goal[0], self.goal[1], c='g', label='Goal Position')
-            plt.xlabel('X Position (m)')
-            plt.ylabel('Y Position (m)')
-            plt.legend()
-            plt.grid(True)
-            self.fig.canvas.draw()
+        # TODO: Implement A* algorithm to find path from robot_pose to goal while avoiding obstacles
 
 
-
-        self.image.set_data(self.grid.T)
-        self.robot_scatter.set_offsets([self.robot_pose[0], self.robot_pose[1]])
-        self.goal_scatter.set_offsets([self.goal[0], self.goal[1]])
-        self.ax.draw_artist(self.ax.patch)
-        self.ax.draw_artist(self.image)
-        self.fig.canvas.draw()
-        self.fig.canvas.flush_events()
 
 
 def main(args=None):
