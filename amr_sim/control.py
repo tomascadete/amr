@@ -3,87 +3,76 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Path, Odometry
 import numpy as np
+import math
+import transforms3d
 
-class Controller(Node):
+class Control(Node):
     def __init__(self):
-        super().__init__('controller')
-        self.path_subscription = self.create_subscription(
-            Path,
-            '/path',
-            self.path_callback,
-            10)
-        self.odom_subscription = self.create_subscription(
-            Odometry,
-            '/odom',
-            self.odom_callback,
-            10)
-        self.cmd_vel_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
-        self.current_path = None
-        self.current_target_index = 0
-        self.robot_pose = None
-
-    def path_callback(self, msg):
-        # self.get_logger().info('Received new path')
-        self.current_path = msg
-        self.current_target_index = 2  # Reset target index whenever a new path is received
+        super().__init__('control_node')
+        self.publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.subscription = self.create_subscription(Path, '/path', self.path_update, 10)
+        self.odom_subscription = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
+        self.current_path = []
+        self.current_index = 0
+        self.odometry = None
+        self.timer = self.create_timer(0.1, self.publish_twist)
 
     def odom_callback(self, msg):
-        self.robot_pose = [msg.pose.pose.position.x, msg.pose.pose.position.y]
+        self.odometry = msg
 
-    def control_loop(self):
-        if self.current_path is None:
-            return
-        
-        if self.robot_pose is None:
-            return
+    def path_update(self, msg):
+        self.current_path = msg.poses
+        self.current_index = 0
+        self.get_logger().info(f'Path updated with {len(self.current_path)} waypoints')
 
-        if self.current_target_index >= len(self.current_path.poses):
-            return
-    
+    def publish_twist(self):
+        if self.current_index < len(self.current_path) and self.odometry:
+            current_odom_pose = self.odometry.pose.pose
+            next_pose = self.current_path[self.current_index].pose
 
-        target_pose = self.current_path.poses[self.current_target_index].pose
-        target_position = [target_pose.position.x, target_pose.position.y]
+            x, y, theta = current_odom_pose.position.x, current_odom_pose.position.y, self.get_yaw_from_quaternion(current_odom_pose.orientation)
+            x_next, y_next = next_pose.position.x, next_pose.position.y
 
-        # Calculate the distance to the target
-        distance = np.linalg.norm(np.array(target_position) - np.array(self.robot_pose))
+            dx = x_next - x
+            dy = y_next - y
 
-        if distance < 0.1:
-            self.current_target_index += 1
-            if self.current_target_index >= len(self.current_path.poses):
-                # self.get_logger().info('Reached the goal')
-                return
-            target_pose = self.current_path.poses[self.current_target_index].pose
-            target_position = [target_pose.position.x, target_pose.position.y]
+            # Target angle in global frame
+            target_angle = math.atan2(dy, dx)
+            # Current orientation error
+            orientation_error = self.normalize_angle(target_angle - theta)
 
-        # Calculate the angle to the target
-        angle = np.arctan2(target_position[1] - self.robot_pose[1], target_position[0] - self.robot_pose[0])
+            omega = 0.1 * orientation_error  # Proportional gain
+            v = 0.1 * np.sqrt(dx**2 + dy**2) if abs(orientation_error) < np.pi / 4 else 0.0  # Move only when facing target
 
-        # Define the linear and angular velocities
-        linear_velocity = 0.5
-        angular_velocity = 1.0 * (angle - np.arctan2(self.robot_pose[1], self.robot_pose[0]))
+            twist = Twist()
+            twist.linear.x = v
+            twist.angular.z = omega
+            self.publisher_.publish(twist)
 
+            if np.sqrt(dx**2 + dy**2) < 0.5:
+                self.current_index += 1
+                self.get_logger().info(f'Reached waypoint {self.current_index}')
+        else:
+            self.get_logger().info('No waypoints to follow or odometry data missing')
 
-        # Publish the velocity command
-        cmd_vel = Twist()
-        cmd_vel.linear.x = linear_velocity
-        cmd_vel.angular.z = angular_velocity
-        self.cmd_vel_publisher.publish(cmd_vel)
-        # self.get_logger().info(f'Linear Velocity: {linear_velocity}, Angular Velocity: {angular_velocity}')
+    def get_yaw_from_quaternion(self, quaternion):
+        q = [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
+        euler = transforms3d.euler.quat2euler(q, axes='sxyz')
+        return euler[2]
 
+    def normalize_angle(self, angle):
+        while angle > np.pi:
+            angle -= 2 * np.pi
+        while angle < -np.pi:
+            angle += 2 * np.pi
+        return angle
 
 def main(args=None):
     rclpy.init(args=args)
-    controller = Controller()
-
-    try:
-        while rclpy.ok():
-            rclpy.spin_once(controller, timeout_sec=0.1)
-            controller.control_loop()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        controller.destroy_node()
-        rclpy.shutdown()
+    control_node = Control()
+    rclpy.spin(control_node)
+    control_node.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

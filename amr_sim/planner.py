@@ -46,9 +46,9 @@ class Planner(Node):
             pose.pose.position.y = waypoint[1]
             path_msg.poses.append(pose)
             # Log path points
-            # self.get_logger().info(f'Path point: {waypoint}')
-        self.publisher_.publish(path_msg)
-        self.get_logger().info('Published path')
+            self.get_logger().info(f'Path point: {waypoint}')
+        # self.publisher_.publish(path_msg)
+        # self.get_logger().info('Published path')
 
 
     def a_star(self):
@@ -103,7 +103,7 @@ class Planner(Node):
             path.append((real_x, real_y))
             current = came_from[current]
 
-        # Remove unnecessary initial points
+        # Remove the 2 first points (current robot position and the first point in the path)
         if path:
             path.pop()
             path.pop()
