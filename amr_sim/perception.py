@@ -131,7 +131,7 @@ class ImageSubscriber(Node):
                 z_world = z_robot + z_robot_base
 
                 # Log the global coordinates of the object
-                #self.get_logger().info(f'Global coordinates of {class_name}: ({x_world}, {y_world}, {z_world})')
+                # self.get_logger().info(f'Global coordinates of {class_name}: ({x_world}, {y_world}, {z_world})')
 
                 # Create an Object message
                 object_msg = Object()

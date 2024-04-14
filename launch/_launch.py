@@ -12,9 +12,5 @@ def generate_launch_description():
             package='amr_sim',
             executable='tracker',
             name='tracker'),
-        launch_ros.actions.Node(
-            package='amr_sim',
-            executable='planner',
-            name='planner'),
     ])
 
