@@ -36,6 +36,14 @@ class ObjectTracker(Node):
 
         if msg.type == 'None':
             return
+        
+        # If object is too close to the robot (less than 3m), ignore it
+        # Robot position in the world frame is self.robot_odom.pose.pose.position
+        robot_x = self.robot_odom.pose.pose.position.x
+        robot_y = self.robot_odom.pose.pose.position.y
+        distance = np.sqrt((robot_x - msg.x)**2 + (robot_y - msg.y)**2)
+        if distance < 3.0:
+            return
 
         new_object = True
         for obj in self.tracked_objects:
@@ -60,7 +68,7 @@ class ObjectTracker(Node):
         # Remove objects that haven't been seen for a while
         for obj in self.tracked_objects:
             obj.steps_since_seen += 1
-            if obj.steps_since_seen > 20:
+            if obj.steps_since_seen > 100:
                 self.tracked_objects.remove(obj)
 
 
@@ -101,8 +109,8 @@ class ObjectTracker(Node):
             grid_x = int((x - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
             grid_y = int((y - self.occupancy_grid.info.origin.position.y) / self.occupancy_grid.info.resolution)
             if 0 <= grid_x < self.occupancy_grid.info.width and 0 <= grid_y < self.occupancy_grid.info.height:
-                for i in range(-4, 5):
-                    for j in range(-4, 5):
+                for i in range(-5, 6):
+                    for j in range(-5, 6):
                         if 0 <= grid_x + i < self.occupancy_grid.info.width and 0 <= grid_y + j < self.occupancy_grid.info.height:
                             self.occupancy_grid.data[(grid_y + j) * self.occupancy_grid.info.width + grid_x + i] = 100
 

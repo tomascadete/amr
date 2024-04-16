@@ -1,7 +1,8 @@
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry, Path, OccupancyGrid
-import matplotlib.pyplot as plt
+from geometry_msgs.msg import PoseStamped
+from queue import PriorityQueue
 import numpy as np
 
 class Planner(Node):
@@ -10,36 +11,118 @@ class Planner(Node):
         self.create_subscription(OccupancyGrid, '/occupancy_grid', self.occupancy_grid_callback, 10)
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.publisher_ = self.create_publisher(Path, '/path', 10)
-        self.goal = [20.0, 0.0]
-        self.robot_pose = [0.0, 0.0]
-        self.obstacles = []
-        self.occ_grid = None
-        self.init_plot()
-
-    def init_plot(self):
-        plt.ion()  # Enable interactive mode
-        self.fig, self.ax = plt.subplots()
-        self.im = None
+        self.goal = np.array([45.0, 45.0])  # Goal position in meters
+        self.robot_pose = np.array([0.0, 0.0])  # Robot's initial position
+        self.grid = None
+        self.resolution = 0.5  # Grid resolution in meters
+        self.grid_origin = None  # To be defined based on grid metadata
 
     def odom_callback(self, msg):
-        self.robot_pose = [msg.pose.pose.position.x, msg.pose.pose.position.y]
+        self.robot_pose = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y])
+        self.plan_path()  # Trigger path planning on new odom update
 
     def occupancy_grid_callback(self, msg):
-        # Convert the OccupancyGrid data to a numpy array and flip it along the x-axis
-        data = np.flipud(np.array(msg.data).reshape((msg.info.height, msg.info.width)))
-        if self.im is None:
-            # Set the extent to map cell indices to world coordinates
-            extent = [-msg.info.width * msg.info.resolution / 2,
-                      msg.info.width * msg.info.resolution / 2,
-                      -msg.info.height * msg.info.resolution / 2,
-                      msg.info.height * msg.info.resolution / 2]
-            self.im = self.ax.imshow(data, cmap='gray', vmin=-1, vmax=100, extent=extent)
-            self.ax.set_title("Occupancy Grid")
-            self.ax.set_xlabel('X (meters)')
-            self.ax.set_ylabel('Y (meters)')
+        self.grid = np.array(msg.data).reshape((msg.info.height, msg.info.width))  # Swap the order of height and width
+        self.grid_origin = np.array([msg.info.width / 2, msg.info.height / 2])  # Swap x and y in grid origin
+
+        # # Log the world coordinates of the obstacle cells, swapping i and j roles
+        # for j in range(self.grid.shape[0]):  # Now i is for x and j is for y
+        #     for i in range(self.grid.shape[1]):
+        #         if self.grid[j, i] == 100:
+        #             x = (i - self.grid_origin[0]) * self.resolution
+        #             y = (j - self.grid_origin[1]) * self.resolution
+        #             self.get_logger().info(f"Obstacle at ({x}, {y})")
+
+    def heuristic(self, a, b):
+        return np.abs(a[0] - b[0]) + np.abs(a[1] - b[1])
+
+    def plan_path(self):
+        if self.grid is None or self.robot_pose is None:
+            return
+
+        # Convert positions from world coordinates to grid indices, swapping x and y
+        start = (int(self.robot_pose[1] / self.resolution + self.grid_origin[1]),
+                 int(self.robot_pose[0] / self.resolution + self.grid_origin[0]))
+        goal = (int(self.goal[1] / self.resolution + self.grid_origin[1]),
+                int(self.goal[0] / self.resolution + self.grid_origin[0]))
+        
+        if not(0 <= goal[0] < self.grid.shape[0] and 0 <= goal[1] < self.grid.shape[1]):
+            self.get_logger().warn('Goal position is out of bounds')
+            return
+        if self.grid[goal] == 100:
+            self.get_logger().warn('Goal position is in an obstacle')
+            return
+    
+
+        # Priority queue for open set
+        frontier = PriorityQueue()
+        frontier.put((0, tuple(start)))
+        came_from = {}
+        cost_so_far = {}
+        came_from[tuple(start)] = None
+        cost_so_far[tuple(start)] = 0
+
+        # Movement directions (8 directions possible)
+        directions = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+
+        goal_reached = False
+
+        while not frontier.empty():
+            current = frontier.get()[1]
+
+            if np.array_equal(current, goal):
+                goal_reached = True
+                break
+
+            for dx, dy in directions:
+                neighbor = (current[0] + dx, current[1] + dy)
+                if 0 <= neighbor[0] < self.grid.shape[0] and 0 <= neighbor[1] < self.grid.shape[1]:
+                    new_cost = cost_so_far[current] + 1
+                    if self.grid[neighbor] == 100:
+                        continue
+                    if neighbor not in cost_so_far or new_cost < cost_so_far[neighbor]:
+                        cost_so_far[neighbor] = new_cost
+                        priority = new_cost + self.heuristic(neighbor, goal)
+                        frontier.put((priority, neighbor))
+                        came_from[neighbor] = current
+
+        if not goal_reached:
+            self.get_logger().warn('Goal is unreachable')
+            return
+
+        path = []
+        if tuple(goal) in came_from:
+            step = tuple(goal)
+            while step != tuple(start):
+                path.append(step)
+                step = came_from[step]
+            path.append(tuple(start))
+            path.reverse()
         else:
-            self.im.set_data(data)
-        plt.pause(0.05)  # Short pause to update the plot
+            self.get_logger().warn('No path found')
+            return
+
+        # Remove the first 2 waypoints if there are at least 3 waypoints
+        if len(path) > 2:
+            path = path[2:]
+        else:
+            # self.get_logger().warn('Path too short to remove waypoints')
+            return
+
+        ros_path = Path()
+        ros_path.header.stamp = self.get_clock().now().to_msg()
+        ros_path.header.frame_id = "map"
+        for p in path:
+            pose = PoseStamped()
+            pose.header.stamp = ros_path.header.stamp
+            pose.header.frame_id = ros_path.header.frame_id
+            world_x, world_y = (p[1] - self.grid_origin[1]) * self.resolution, (p[0] - self.grid_origin[0]) * self.resolution
+            pose.pose.position.x = world_x
+            pose.pose.position.y = world_y
+            ros_path.poses.append(pose)
+
+        self.publisher_.publish(ros_path)
+        # self.get_logger().info('Path published')
 
 def main(args=None):
     rclpy.init(args=args)
