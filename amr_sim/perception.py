@@ -92,12 +92,6 @@ class ImageSubscriber(Node):
             qw = self.robot_pose.orientation.w
             # Convert the quaternion to Euler angles 
             yaw, pitch, roll = t3d.euler.quat2euler([qx, qy, qz, qw], axes='sxyz')
-            # Log the robot's position
-            # self.get_logger().info(f'Robot position: ({x_robot}, {y_robot}, {z_robot})')
-            # Log yaw pitch and roll
-            # self.get_logger().info(f'Yaw: {yaw}, Pitch: {pitch}, Roll: {roll}')
-            
-
 
 
             # For each detected object, calculate its global coordinates
@@ -122,16 +116,11 @@ class ImageSubscriber(Node):
                 y_robot_base = -x_camera
                 z_robot_base = -y_camera
 
-                # Log the local coordinates of the object in the robot frame
-                # self.get_logger().info(f'Local coordinates of {class_name} in the robot frame: ({x_robot_base}, {y_robot_base}, {z_robot_base})')
-
                 # Transform the local coordinates of the object in the robot frame to the world frame
                 x_world = x_robot + np.cos(yaw) * x_robot_base - np.sin(yaw) * y_robot_base
                 y_world = y_robot + np.sin(yaw) * x_robot_base + np.cos(yaw) * y_robot_base
                 z_world = z_robot + z_robot_base
 
-                # Log the global coordinates of the object
-                # self.get_logger().info(f'Global coordinates of {class_name}: ({x_world}, {y_world}, {z_world})')
 
                 # Create an Object message
                 object_msg = Object()
@@ -165,8 +154,6 @@ class ImageSubscriber(Node):
                 # Draw label
                 cv2.putText(cv_image, f'{class_name} {conf:.2f}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
-            # Log information about detected objects
-            # self.get_logger().info(f'Detected {len(results.xyxy[0])} objects')
 
             # Display the image
             cv2.imshow("Kinect Camera Image", cv_image)

@@ -25,13 +25,6 @@ class Planner(Node):
         self.grid = np.array(msg.data).reshape((msg.info.height, msg.info.width))  # Swap the order of height and width
         self.grid_origin = np.array([msg.info.width / 2, msg.info.height / 2])  # Swap x and y in grid origin
 
-        # # Log the world coordinates of the obstacle cells, swapping i and j roles
-        # for j in range(self.grid.shape[0]):  # Now i is for x and j is for y
-        #     for i in range(self.grid.shape[1]):
-        #         if self.grid[j, i] == 100:
-        #             x = (i - self.grid_origin[0]) * self.resolution
-        #             y = (j - self.grid_origin[1]) * self.resolution
-        #             self.get_logger().info(f"Obstacle at ({x}, {y})")
 
     def heuristic(self, a, b):
         return np.abs(a[0] - b[0]) + np.abs(a[1] - b[1])
@@ -106,7 +99,6 @@ class Planner(Node):
         if len(path) > 2:
             path = path[2:]
         else:
-            # self.get_logger().warn('Path too short to remove waypoints')
             return
 
         ros_path = Path()
@@ -122,7 +114,6 @@ class Planner(Node):
             ros_path.poses.append(pose)
 
         self.publisher_.publish(ros_path)
-        # self.get_logger().info('Path published')
 
 def main(args=None):
     rclpy.init(args=args)

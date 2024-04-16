@@ -32,8 +32,6 @@ class ObjectTracker(Node):
 
 
     def incoming_object_callback(self, msg):
-        # self.get_logger().info(f'Incoming object: {msg.type} at ({msg.x}, {msg.y})')
-
         if msg.type == 'None':
             return
         
@@ -68,7 +66,7 @@ class ObjectTracker(Node):
         # Remove objects that haven't been seen for a while
         for obj in self.tracked_objects:
             obj.steps_since_seen += 1
-            if obj.steps_since_seen > 100:
+            if obj.steps_since_seen > 10:
                 self.tracked_objects.remove(obj)
 
 
@@ -114,9 +112,8 @@ class ObjectTracker(Node):
                         if 0 <= grid_x + i < self.occupancy_grid.info.width and 0 <= grid_y + j < self.occupancy_grid.info.height:
                             self.occupancy_grid.data[(grid_y + j) * self.occupancy_grid.info.width + grid_x + i] = 100
 
+
         # Update the occupancy grid with the tracked objects
-        # Both the occupancy grid and the coordinates of the objects are in the world frame
-        # Each object is represented with a 2m x 2m square centered at its coordinates
         for obj in self.tracked_objects:
             grid_x = int((obj.x - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
             grid_y = int((obj.y - self.occupancy_grid.info.origin.position.y) / self.occupancy_grid.info.resolution)
