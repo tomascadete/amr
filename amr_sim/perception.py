@@ -9,12 +9,15 @@ import torch
 import numpy as np
 import transforms3d as t3d
 from amr_interfaces.msg import Object
+from ultralytics import YOLO
 
 
 
 
-# Load the YOLOv8s PyTorch model (file called yolo5s.pt)
-model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+
+# Load the YOLOv8m PyTorch model
+model = YOLO("yolov8m.pt")
+
 
 # Camera intrinsics
 fx = 528.433756558705  # Focal length in x
@@ -79,7 +82,7 @@ class ImageSubscriber(Node):
             if self.depth_map is None:
                 return
 
-            # Perform object detection using the YOLOv5s model
+            # Perform object detection using the YOLOv8 model
             results = model(cv_image)
 
             # Get the robot's position and orientation
@@ -93,76 +96,67 @@ class ImageSubscriber(Node):
             # Convert the quaternion to Euler angles 
             yaw, pitch, roll = t3d.euler.quat2euler([qx, qy, qz, qw], axes='sxyz')
 
+            class_names = model.names
 
-            # For each detected object, calculate its global coordinates
-            for *xyxy, conf, cls in results.xyxy[0]:
-                # Extract bb coordinates
-                x1, y1, x2, y2 = map(int, xyxy)
-                # Get class name
-                class_name = results.names[int(cls)]
-                # Calculate the center of the bounding box
-                center_x = (x1 + x2) / 2
-                center_y = (y1 + y2) / 2
-                # Get the distance to the object at the center of the bounding box
-                depth = self.depth_map[int(center_y), int(center_x)]
+            # Check if results are not empty
+            if results:
+                # Process each detected object
+                for detection in results:
+                    if detection.boxes.xyxy.shape[0] > 0:  # Check if there are bounding boxes
+                        xyxy = detection.boxes.xyxy[0].numpy()
+                        conf = detection.boxes.conf[0].numpy()
+                        cls = detection.boxes.cls[0].numpy()
+                        x1, y1, x2, y2 = map(int, xyxy)
+                        class_name = class_names[int(cls)]
 
-                # Get the local coordinates of the object in the camera frame
-                x_camera = (center_x - cx) * depth / fx
-                y_camera = (center_y - cy) * depth / fy
-                z_camera = depth
+                        center_x = (x1 + x2) / 2
+                        center_y = (y1 + y2) / 2
+                        depth = self.depth_map[int(center_y), int(center_x)]
 
-                # Get the local coordinates of the object in the robot frame
-                x_robot_base = z_camera
-                y_robot_base = -x_camera
-                z_robot_base = -y_camera
+                        x_camera = (center_x - cx) * depth / fx
+                        y_camera = (center_y - cy) * depth / fy
+                        z_camera = depth
 
-                # Transform the local coordinates of the object in the robot frame to the world frame
-                x_world = x_robot + np.cos(yaw) * x_robot_base - np.sin(yaw) * y_robot_base
-                y_world = y_robot + np.sin(yaw) * x_robot_base + np.cos(yaw) * y_robot_base
-                z_world = z_robot + z_robot_base
+                        x_robot_base = z_camera
+                        y_robot_base = -x_camera
+                        z_robot_base = -y_camera
 
+                        x_world = x_robot + np.cos(yaw) * x_robot_base - np.sin(yaw) * y_robot_base
+                        y_world = y_robot + np.sin(yaw) * x_robot_base + np.cos(yaw) * y_robot_base
+                        z_world = z_robot + z_robot_base
 
-                # Create an Object message
-                object_msg = Object()
-                object_msg.type = class_name
-                object_msg.x = x_world
-                object_msg.y = y_world
-                object_msg.z = z_world
+                        object_msg = Object()
+                        object_msg.type = class_name
+                        object_msg.x = x_world
+                        object_msg.y = y_world
+                        object_msg.z = z_world
+                        self.publisher.publish(object_msg)
 
-                # Publish the Object message to the /detections topic
-                self.publisher.publish(object_msg)
-
-            # If no objects are detected, publish an Object message with type 'None'
-            if len(results.xyxy[0]) == 0:
+            else:
+                # If no objects are detected, publish an Object message with type 'None'
                 object_msg = Object()
                 object_msg.type = 'None'
                 object_msg.x = 0.0
                 object_msg.y = 0.0
                 object_msg.z = 0.0
                 self.publisher.publish(object_msg)
-                
 
+            # Draw bounding boxes and class names on the image
+            for detection in results:
+                if detection.boxes.xyxy.shape[0] > 0:
+                    xyxy = detection.boxes.xyxy[0].numpy()
+                    x1, y1, x2, y2 = map(int, xyxy)
+                    class_name = class_names[int(detection.boxes.cls[0])]
+                    conf = detection.boxes.conf[0]
+                    cv2.rectangle(cv_image, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                    cv2.putText(cv_image, f'{class_name} {conf:.2f}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
-            # Draw bounding boxes and labels on the image
-            for *xyxy, conf, cls in results.xyxy[0]:
-                # Extract bb coordinates
-                x1, y1, x2, y2 = map(int, xyxy)
-                # Draw rectangle
-                cv2.rectangle(cv_image, (x1, y1), (x2, y2), (255, 0, 0), 2)
-                # Get class name
-                class_name = results.names[int(cls)]
-                # Draw label
-                cv2.putText(cv_image, f'{class_name} {conf:.2f}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-
-
-            # Display the image
             cv2.imshow("Kinect Camera Image", cv_image)
-            cv2.waitKey(1)  # Refresh the display window every 1 millisecond
-
+            cv2.waitKey(1)
 
         except CvBridgeError as e:
             self.get_logger().error('Could not convert from ROS Image message to OpenCV Image: %s' % str(e))
-    
+
 
 
 

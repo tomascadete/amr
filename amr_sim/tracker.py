@@ -66,7 +66,7 @@ class ObjectTracker(Node):
         # Remove objects that haven't been seen for a while
         for obj in self.tracked_objects:
             obj.steps_since_seen += 1
-            if obj.steps_since_seen > 10:
+            if obj.steps_since_seen > 50:
                 self.tracked_objects.remove(obj)
 
 
@@ -107,8 +107,8 @@ class ObjectTracker(Node):
             grid_x = int((x - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
             grid_y = int((y - self.occupancy_grid.info.origin.position.y) / self.occupancy_grid.info.resolution)
             if 0 <= grid_x < self.occupancy_grid.info.width and 0 <= grid_y < self.occupancy_grid.info.height:
-                for i in range(-5, 6):
-                    for j in range(-5, 6):
+                for i in range(-4, 4):
+                    for j in range(-4, 4):
                         if 0 <= grid_x + i < self.occupancy_grid.info.width and 0 <= grid_y + j < self.occupancy_grid.info.height:
                             self.occupancy_grid.data[(grid_y + j) * self.occupancy_grid.info.width + grid_x + i] = 100
 
@@ -118,8 +118,8 @@ class ObjectTracker(Node):
             grid_x = int((obj.x - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
             grid_y = int((obj.y - self.occupancy_grid.info.origin.position.y) / self.occupancy_grid.info.resolution)
             if 0 <= grid_x < self.occupancy_grid.info.width and 0 <= grid_y < self.occupancy_grid.info.height:
-                for i in range(-2, 3):
-                    for j in range(-2, 3):
+                for i in range(-4, 4):
+                    for j in range(-4, 4):
                         if 0 <= grid_x + i < self.occupancy_grid.info.width and 0 <= grid_y + j < self.occupancy_grid.info.height:
                             self.occupancy_grid.data[(grid_y + j) * self.occupancy_grid.info.width + grid_x + i] = 100
 

@@ -11,7 +11,8 @@ class Planner(Node):
         self.create_subscription(OccupancyGrid, '/occupancy_grid', self.occupancy_grid_callback, 10)
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.publisher_ = self.create_publisher(Path, '/path', 10)
-        self.goal = np.array([45.0, 45.0])  # Goal position in meters
+        self.goal = np.array([11.5, 37.0])  # To reach the area before the crosswalk, then another node will handle the crossing
+        # Once the robot is on the other side of the crosswalk, the goal will be updated to the final destination
         self.robot_pose = np.array([0.0, 0.0])  # Robot's initial position
         self.grid = None
         self.resolution = 0.5  # Grid resolution in meters
