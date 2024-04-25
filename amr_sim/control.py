@@ -14,9 +14,10 @@ class Controller(Node):
         self.publisher_vel = self.create_publisher(Twist, '/cmd_vel', 10)
         self.current_path = []
         self.current_pose = None
+        self.align_to_zero = False
         self.waypoint_threshold = 0.5  # meters
         self.angular_threshold = 0.5  # radians, threshold for facing the waypoint
-        self.linear_speed = 3.0  # Maximum linear speed
+        self.linear_speed = 2.5  # Maximum linear speed
         self.angular_speed = 1.0  # Maximum angular speed
 
     def path_callback(self, msg):
@@ -25,10 +26,15 @@ class Controller(Node):
         if not incoming_path or incoming_path == current_path[:len(incoming_path)]:
             return
         self.current_path = msg.poses
+        # self.get_logger().info('New path received')
 
     def odom_callback(self, msg):
         self.current_pose = msg.pose.pose
-        self.navigate()
+        if self.align_to_zero:
+            self.align_robot_to_zero()
+        else:
+            self.navigate()
+
 
     def navigate(self):
         if not self.current_pose or not self.current_path:
@@ -50,7 +56,8 @@ class Controller(Node):
             self.get_logger().info(f'Waypoint reached: ({current_waypoint.x}, {current_waypoint.y})')
             self.current_path.pop(0)
             if not self.current_path:
-                self.stop_robot()
+                self.align_to_zero = True
+                self.align_robot_to_zero()
                 return
 
         twist = Twist()
@@ -60,6 +67,24 @@ class Controller(Node):
             twist.linear.x = self.linear_speed * scale
         twist.angular.z = np.clip(angle_diff, -self.angular_speed, self.angular_speed)
 
+        self.publisher_vel.publish(twist)
+        # self.get_logger().info(f'Linear speed: {twist.linear.x}, Angular speed: {twist.angular.z}')
+
+    def align_robot_to_zero(self):
+        _, _, yaw = t3d.euler.quat2euler([self.current_pose.orientation.w,
+                                          self.current_pose.orientation.x,
+                                          self.current_pose.orientation.y,
+                                          self.current_pose.orientation.z], axes='sxyz')
+        
+        # Target orientation is 0 radians
+        angle_diff = -yaw
+        if abs(angle_diff) <= 0.1:
+            self.align_to_zero = False
+            self.stop_robot()
+            return
+        
+        twist = Twist()
+        twist.angular.z = np.clip(angle_diff, -self.angular_speed, self.angular_speed)
         self.publisher_vel.publish(twist)
 
     def stop_robot(self):

@@ -11,16 +11,36 @@ class Planner(Node):
         self.create_subscription(OccupancyGrid, '/occupancy_grid', self.occupancy_grid_callback, 10)
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.publisher_ = self.create_publisher(Path, '/path', 10)
-        self.goal = np.array([11.5, 37.0])  # To reach the area before the crosswalk, then another node will handle the crossing
-        # Once the robot is on the other side of the crosswalk, the goal will be updated to the final destination
+        self.crosswalk_entry = np.array([12.0, 37.0])  # Entry point to the crosswalk
+        self.crosswalk_exit = np.array([29.0, 37.0])  # Exit point from the crosswalk
+        self.goal = self.crosswalk_entry
         self.robot_pose = np.array([0.0, 0.0])  # Robot's initial position
         self.grid = None
         self.resolution = 0.5  # Grid resolution in meters
         self.grid_origin = None  # To be defined based on grid metadata
+        self.planning_active = True
 
     def odom_callback(self, msg):
         self.robot_pose = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y])
-        self.plan_path()  # Trigger path planning on new odom update
+        self.check_crosswalk_proximity()
+        if self.planning_active:
+            self.plan_path()
+
+    def check_crosswalk_proximity(self):
+        if self.robot_pose is None:
+            return
+        distance_to_entry = np.linalg.norm(self.robot_pose - self.crosswalk_entry)
+        distance_to_exit = np.linalg.norm(self.robot_pose - self.crosswalk_exit)
+        if distance_to_entry < 1.0:
+            self.planning_active = False
+            # self.get_logger().info('Robot is at the crosswalk entry')
+        elif distance_to_exit < 1.0:
+            self.goal = np.array([35.0, 0.0])
+            self.planning_active = True
+            # self.get_logger().info('Robot is at the crosswalk exit')
+
+
+
 
     def occupancy_grid_callback(self, msg):
         self.grid = np.array(msg.data).reshape((msg.info.height, msg.info.width))  # Swap the order of height and width
@@ -115,6 +135,7 @@ class Planner(Node):
             ros_path.poses.append(pose)
 
         self.publisher_.publish(ros_path)
+        # self.get_logger().info('Path published')
 
 def main(args=None):
     rclpy.init(args=args)
