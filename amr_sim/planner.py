@@ -35,7 +35,7 @@ class Planner(Node):
             self.planning_active = False
             # self.get_logger().info('Robot is at the crosswalk entry')
         elif distance_to_exit < 1.0:
-            self.goal = np.array([35.0, 0.0])
+            self.goal = np.array([46.0, -20.0])
             self.planning_active = True
             # self.get_logger().info('Robot is at the crosswalk exit')
 

@@ -29,6 +29,9 @@ class ObjectTracker(Node):
         self.tracked_objects = []
         self.tracked_objects_id = 1
         self.initialize_occupancy_grid()
+        self.crosswalk_entry = np.array([12.0, 37.0])
+        self.crosswalk_exit = np.array([29.0, 37.0])
+        self.crossing = False
 
 
     def incoming_object_callback(self, msg):
@@ -66,13 +69,22 @@ class ObjectTracker(Node):
         # Remove objects that haven't been seen for a while
         for obj in self.tracked_objects:
             obj.steps_since_seen += 1
-            if obj.steps_since_seen > 50:
+            if obj.steps_since_seen > 20:
                 self.tracked_objects.remove(obj)
 
 
 
     def odom_callback(self, msg):
         self.robot_odom = msg
+        # If the robot is within 1m of the crosswalk entry, stop marking the road as occupied
+        robot_x = self.robot_odom.pose.pose.position.x
+        robot_y = self.robot_odom.pose.pose.position.y
+        distance_to_entry = np.linalg.norm(np.array([robot_x, robot_y]) - self.crosswalk_entry)
+        distance_to_exit = np.linalg.norm(np.array([robot_x, robot_y]) - self.crosswalk_exit)
+        if distance_to_entry < 1.0:
+            self.crossing = True
+        elif distance_to_exit < 1.0:
+            self.crossing = False
 
 
     def lidar_callback(self, msg):
@@ -104,24 +116,39 @@ class ObjectTracker(Node):
 
         # Update the occupancy grid with the LIDAR data
         for x, y in zip(global_x, global_y):
+            if self.crossing and x < 13 and x > 28:
+                continue
             grid_x = int((x - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
             grid_y = int((y - self.occupancy_grid.info.origin.position.y) / self.occupancy_grid.info.resolution)
+
             if 0 <= grid_x < self.occupancy_grid.info.width and 0 <= grid_y < self.occupancy_grid.info.height:
-                for i in range(-4, 4):
-                    for j in range(-4, 4):
+                for i in range(-3, 3):
+                    for j in range(-3, 3):
                         if 0 <= grid_x + i < self.occupancy_grid.info.width and 0 <= grid_y + j < self.occupancy_grid.info.height:
                             self.occupancy_grid.data[(grid_y + j) * self.occupancy_grid.info.width + grid_x + i] = 100
 
 
-        # Update the occupancy grid with the tracked objects
-        for obj in self.tracked_objects:
-            grid_x = int((obj.x - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
-            grid_y = int((obj.y - self.occupancy_grid.info.origin.position.y) / self.occupancy_grid.info.resolution)
-            if 0 <= grid_x < self.occupancy_grid.info.width and 0 <= grid_y < self.occupancy_grid.info.height:
-                for i in range(-4, 4):
-                    for j in range(-4, 4):
-                        if 0 <= grid_x + i < self.occupancy_grid.info.width and 0 <= grid_y + j < self.occupancy_grid.info.height:
-                            self.occupancy_grid.data[(grid_y + j) * self.occupancy_grid.info.width + grid_x + i] = 100
+        # Update the occupancy grid with the tracked objects if self.crossing is False
+        if not self.crossing:
+            for obj in self.tracked_objects:
+                grid_x = int((obj.x - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
+                grid_y = int((obj.y - self.occupancy_grid.info.origin.position.y) / self.occupancy_grid.info.resolution)
+                if 0 <= grid_x < self.occupancy_grid.info.width and 0 <= grid_y < self.occupancy_grid.info.height:
+                    for i in range(-3, 3):
+                        for j in range(-3, 3):
+                            if 0 <= grid_x + i < self.occupancy_grid.info.width and 0 <= grid_y + j < self.occupancy_grid.info.height:
+                                self.occupancy_grid.data[(grid_y + j) * self.occupancy_grid.info.width + grid_x + i] = 100
+
+        # Mark the road as occupied if self.crossing is False
+        if not self.crossing:
+            x_min_grid = int((13 - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
+            x_max_grid = int((28 - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
+            for i in range(x_min_grid, x_max_grid):
+                for j in range(0, self.occupancy_grid.info.height):
+                    index = j * self.occupancy_grid.info.width + i
+                    if 0 <= index < len(self.occupancy_grid.data):
+                        self.occupancy_grid.data[index] = 100
+
 
         self.occupancy_grid.header.stamp = self.get_clock().now().to_msg()
         self.publisher.publish(self.occupancy_grid)
@@ -135,6 +162,15 @@ class ObjectTracker(Node):
         self.occupancy_grid.info.origin.position.x = -50.0  # meters
         self.occupancy_grid.info.origin.position.y = -50.0  # meters
         self.occupancy_grid.data = [0] * (self.occupancy_grid.info.width * self.occupancy_grid.info.height)
+        # Mark the road area as occupied
+        x_min_grid = int((13 - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
+        x_max_grid = int((28 - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
+        for i in range(x_min_grid, x_max_grid):
+            for j in range(0, self.occupancy_grid.info.height):
+                index = j * self.occupancy_grid.info.width + i
+                if 0 <= index < len(self.occupancy_grid.data):
+                    self.occupancy_grid.data[index] = 100
+
 
 def main(args=None):
     rclpy.init(args=args)

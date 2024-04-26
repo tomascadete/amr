@@ -20,4 +20,8 @@ def generate_launch_description():
             package='amr_sim',
             executable='control',
             name='control'),
+        launch_ros.actions.Node(
+            package='amr_sim',
+            executable='crossing',
+            name='crossing'),
     ])
