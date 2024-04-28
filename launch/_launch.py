@@ -24,4 +24,8 @@ def generate_launch_description():
             package='amr_sim',
             executable='crossing',
             name='crossing'),
+        launch_ros.actions.Node(
+            package='amr_sim',
+            executable='traffic_light_detection',
+            name='traffic_light_detection'),
     ])

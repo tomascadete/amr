@@ -9,6 +9,8 @@ import numpy as np
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 from cv_bridge import CvBridge, CvBridgeError
+from amr_interfaces.msg import LightColour
+
 
 
 class TrackedObject:
@@ -30,7 +32,7 @@ class CrossingNode(Node):
         # Traffic_Blue (which is actually green, idk why it's called blue)
         # Traffic Red
         # Traffic Yellow
-        # self.subscription_image = self.create_subscription(Image, '/kinect_camera/image_raw', self.greenlight_callback, 10)
+        self.subscription_traffic_light = self.create_subscription(LightColour, '/light_status', self.traffic_light_callback, 10)
         self.subscription_odom = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.subscription_occ_grid = self.create_subscription(OccupancyGrid, '/occupancy_grid', self.occupancy_grid_callback, 10)
         self.publisher = self.create_publisher(Path, '/path', 10)
@@ -45,7 +47,7 @@ class CrossingNode(Node):
         self.last_time = self.get_clock().now()
         self.times_ran = 0
         self.safe_to_cross = False
-        self.traffic_light_state = 'green'
+        self.traffic_light_state = None
         self.safety_counter = 0
 
         # Initialize the plot for the road part of the occupancy grid
@@ -54,6 +56,12 @@ class CrossingNode(Node):
         # self.ax.set_title("Occupancy Grid of Road Area")
         # plt.show()
 
+
+    def traffic_light_callback(self, msg):
+        if not self.crossing:
+            return
+        self.traffic_light_state = msg.colour
+        self.get_logger().info(f"Traffic light state: {msg.colour}")
 
 
     def odom_callback(self, msg):
@@ -97,13 +105,6 @@ class CrossingNode(Node):
         occupied = road_area > 0
 
 
-        # Update the plot with the road area of the occupancy grid
-        # self.ax.clear()
-        # self.ax.imshow(road_area.T, cmap='gray', origin='lower')
-        # self.ax.set_title("Occupancy Grid of Road Area")
-        # plt.draw()
-        # plt.pause(0.001)
-
 
         # Perform DBSCAN clustering on the occupied cells
         if np.any(occupied):
@@ -111,9 +112,6 @@ class CrossingNode(Node):
             clustering = DBSCAN(eps=2, min_samples=2).fit(xy_points)
             labels = clustering.labels_
 
-            # self.ax.clear()
-            # self.ax.imshow(road_area.T, cmap='gray', origin='lower')
-            # self.ax.set_title("Occupancy Grid with Tracked Objects")
 
             for k in set(labels):
                 if k == -1:
@@ -135,16 +133,13 @@ class CrossingNode(Node):
         self.times_ran += 1
         self.safe_to_cross_check()
 
-        # Log all tracked objects
-        for obj in self.tracked_objects:
-            self.get_logger().info(f"Object {obj.id}: Position: {obj.positions[-1]}, Velocity: {obj.velocity}, Acceleration: {obj.acceleration}")
-
 
         # Check if any tracked object has not been seen for a while
         for obj in self.tracked_objects:
             obj.steps_since_seen += 1
             if obj.steps_since_seen > 50:
                 self.tracked_objects.remove(obj)
+
         
         # Count how many times in a row safe_to_cross is True
         if self.safe_to_cross:
@@ -152,7 +147,7 @@ class CrossingNode(Node):
         else:
             self.safety_counter = 0
 
-        if self.times_ran > 100 and self.safety_counter > 30:
+        if self.times_ran > 100 and self.safety_counter > 40:
             # self.get_logger().info("Safe to cross the road")
             # Publish a path message with the exit point as the only waypoint
             path_msg = Path()
@@ -212,37 +207,6 @@ class CrossingNode(Node):
         self.tracked_objects_id += 1
         self.tracked_objects.append(new_obj)
 
-
-
-
-    # def greenlight_callback(self, msg):
-    #     try:
-    #         # Convert the ROS Image message to OpenCV format
-    #         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-
-    #         # Perform object detection using the YOLOv8 model
-    #         results = self.ryg_model(cv_image)
-
-    #         class_names = self.ryg_model.names
-
-    #         if results:
-    #             # Check the color of the traffic light
-    #             for detection in results:
-    #                 if detection.boxes.xyxy.shape[0] > 0:  # Check if there are bounding boxes
-    #                     cls = detection.boxes.cls[0].numpy()
-    #                     class_name = class_names[int(cls)]
-    #                     if class_name == 'Traffic_Blue':
-    #                         self.traffic_light_state = 'green'
-    #                         self.get_logger().info('Traffic light is green')
-    #                     elif class_name == 'Traffic Red':
-    #                         self.traffic_light_state = 'red'
-    #                         self.get_logger().info('Traffic light is red')
-    #                     elif class_name == 'Traffic_Yellow':
-    #                         self.traffic_light_state = 'yellow'
-    #                         self.get_logger().info('Traffic light is yellow')
-
-    #     except CvBridgeError as e:
-    #         self.get_logger().error('Could not convert from ROS Image message to OpenCV Image: %s' % str(e))
 
 
 
