@@ -4,11 +4,12 @@ from sensor_msgs.msg import Image
 from nav_msgs.msg import Odometry, OccupancyGrid, Path
 from geometry_msgs.msg import Twist, PoseStamped
 import cv2
-from cv_bridge import CvBridge
 from ultralytics import YOLO
 import numpy as np
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
+from cv_bridge import CvBridge, CvBridgeError
+
 
 class TrackedObject:
     def __init__(self, id):
@@ -18,13 +19,18 @@ class TrackedObject:
         self.acceleration = 0.0
         self.steps_since_seen = 0
         self.distances_to_robot = []
+        self.is_approaching = True
 
 class CrossingNode(Node):
     def __init__(self):
         super().__init__('crossing_node')
         self.bridge = CvBridge()
-        # self.ryg_model = YOLO("semaphorelight.pt")
-        self.subscription_image = self.create_subscription(Image, '/camera/image_raw', self.greenlight_callback, 10)
+        self.ryg_model = YOLO("traffic_light.pt")
+        # The classes of this model are:
+        # Traffic_Blue (which is actually green, idk why it's called blue)
+        # Traffic Red
+        # Traffic Yellow
+        # self.subscription_image = self.create_subscription(Image, '/kinect_camera/image_raw', self.greenlight_callback, 10)
         self.subscription_odom = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.subscription_occ_grid = self.create_subscription(OccupancyGrid, '/occupancy_grid', self.occupancy_grid_callback, 10)
         self.publisher = self.create_publisher(Path, '/path', 10)
@@ -39,6 +45,8 @@ class CrossingNode(Node):
         self.last_time = self.get_clock().now()
         self.times_ran = 0
         self.safe_to_cross = False
+        self.traffic_light_state = 'green'
+        self.safety_counter = 0
 
         # Initialize the plot for the road part of the occupancy grid
         # plt.ion()
@@ -62,10 +70,10 @@ class CrossingNode(Node):
         distance_to_exit = np.linalg.norm(np.array([robot_x, robot_y]) - self.crosswalk_exit)
         if distance_to_entry < 1.0:
             self.crossing = True
-            self.get_logger().info('Robot is at the crosswalk entry')
+            # self.get_logger().info('Robot is at the crosswalk entry')
         elif distance_to_exit < 1.0:
             self.crossing = False
-            self.get_logger().info('Robot is at the crosswalk exit')
+            # self.get_logger().info('Robot is at the crosswalk exit')
 
 
 
@@ -126,10 +134,25 @@ class CrossingNode(Node):
 
         self.times_ran += 1
         self.safe_to_cross_check()
-        
 
-        # If the node has run for a while and it is safe to cross, publish a path message
-        if self.times_ran > 100 and self.safe_to_cross:
+        # Log all tracked objects
+        for obj in self.tracked_objects:
+            self.get_logger().info(f"Object {obj.id}: Position: {obj.positions[-1]}, Velocity: {obj.velocity}, Acceleration: {obj.acceleration}")
+
+
+        # Check if any tracked object has not been seen for a while
+        for obj in self.tracked_objects:
+            obj.steps_since_seen += 1
+            if obj.steps_since_seen > 50:
+                self.tracked_objects.remove(obj)
+        
+        # Count how many times in a row safe_to_cross is True
+        if self.safe_to_cross:
+            self.safety_counter += 1
+        else:
+            self.safety_counter = 0
+
+        if self.times_ran > 100 and self.safety_counter > 30:
             # self.get_logger().info("Safe to cross the road")
             # Publish a path message with the exit point as the only waypoint
             path_msg = Path()
@@ -142,19 +165,18 @@ class CrossingNode(Node):
 
 
     # This will continuously check if it is safe to cross the road
-    # It should consider safe to cross if any of the following conditions are met:
-    # - Objects have very low velocity
-    # - Objects are decelerating
-    # - If the distance of an object to the robot is increasing
+    # It should consider safe to cross if:
+    # Traffic light is green
+    # All tracked objects are stopped or their distance to the robot is increasing
     def safe_to_cross_check(self):
-        if self.times_ran < 10:
-            return
-        for obj in self.tracked_objects:
-            if obj.velocity < 0.5 or obj.acceleration < 0 or obj.distances_to_robot[-1] > obj.distances_to_robot[0]:
-                self.safe_to_cross = True
-                return
-        self.safe_to_cross = False
-        return
+        if self.traffic_light_state == 'green':
+            self.safe_to_cross = True
+            for obj in self.tracked_objects:
+                if obj.is_approaching:
+                    self.safe_to_cross = False
+                    break
+        else:
+            self.safe_to_cross = False
 
 
 
@@ -174,6 +196,13 @@ class CrossingNode(Node):
                 obj.positions.append(centroid)
                 distance_to_robot = np.linalg.norm(centroid - np.array([self.robot_pose.position.x, self.robot_pose.position.y]))
                 obj.distances_to_robot.append(distance_to_robot)
+                # Check if the last position is closer to the robot than the average of the last 10 positions
+                if len(obj.distances_to_robot) > 10:
+                    avg_distance = np.mean(obj.distances_to_robot[-10:])
+                    if distance_to_robot < avg_distance:
+                        obj.is_approaching = True
+                    else:
+                        obj.is_approaching = False
                 obj.steps_since_seen = 0
                 return
 
@@ -183,17 +212,38 @@ class CrossingNode(Node):
         self.tracked_objects_id += 1
         self.tracked_objects.append(new_obj)
 
-        # Check if any tracked object has not been seen for a while
-        for obj in self.tracked_objects:
-            obj.steps_since_seen += 1
-            if obj.steps_since_seen > 20:
-                self.tracked_objects.remove(obj)
 
 
-    # TODO: This callback will detect red, yellow, and green traffic lights
-    # Only if the traffic light is green and self.safe_to_cross is True, then publish a path message
-    def greenlight_callback(self, msg):
-        pass
+
+    # def greenlight_callback(self, msg):
+    #     try:
+    #         # Convert the ROS Image message to OpenCV format
+    #         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+
+    #         # Perform object detection using the YOLOv8 model
+    #         results = self.ryg_model(cv_image)
+
+    #         class_names = self.ryg_model.names
+
+    #         if results:
+    #             # Check the color of the traffic light
+    #             for detection in results:
+    #                 if detection.boxes.xyxy.shape[0] > 0:  # Check if there are bounding boxes
+    #                     cls = detection.boxes.cls[0].numpy()
+    #                     class_name = class_names[int(cls)]
+    #                     if class_name == 'Traffic_Blue':
+    #                         self.traffic_light_state = 'green'
+    #                         self.get_logger().info('Traffic light is green')
+    #                     elif class_name == 'Traffic Red':
+    #                         self.traffic_light_state = 'red'
+    #                         self.get_logger().info('Traffic light is red')
+    #                     elif class_name == 'Traffic_Yellow':
+    #                         self.traffic_light_state = 'yellow'
+    #                         self.get_logger().info('Traffic light is yellow')
+
+    #     except CvBridgeError as e:
+    #         self.get_logger().error('Could not convert from ROS Image message to OpenCV Image: %s' % str(e))
+
 
 
 def main(args=None):
