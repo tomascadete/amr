@@ -56,20 +56,21 @@ class TrafficLightDetection(Node):
 
             class_names = model.names
 
+
             if results:
                 for detection in results:
                     if detection.boxes.xyxy.shape[0] > 0:  # Check if there are bounding boxes
-                        cls = detection.boxes.cls[0].numpy()
+                        cls = detection.boxes.cls[0].to("cpu").numpy()
                         class_name = class_names[int(cls)]
                         if class_name == 'Traffic_Blue':
                             self.light_status = 'green'
-                            self.get_logger().info('Traffic light is green')
+                            # self.get_logger().info('Traffic light is green')
                         elif class_name == 'Traffic Red':
                             self.light_status = 'red'
-                            self.get_logger().info('Traffic light is red')
+                            # self.get_logger().info('Traffic light is red')
                         elif class_name == 'Traffic_Yellow':
                             self.light_status = 'yellow'
-                            self.get_logger().info('Traffic light is yellow')
+                            # self.get_logger().info('Traffic light is yellow')
 
             # Publish the detected traffic light status only if there is a change in status
             if self.light_status:

@@ -61,7 +61,7 @@ class CrossingNode(Node):
         if not self.crossing:
             return
         self.traffic_light_state = msg.colour
-        self.get_logger().info(f"Traffic light state: {msg.colour}")
+        self.get_logger().info(f"Traffic light state updated to: {msg.colour}")
 
 
     def odom_callback(self, msg):
