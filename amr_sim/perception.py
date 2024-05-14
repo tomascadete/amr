@@ -145,15 +145,15 @@ class ImageSubscriber(Node):
                 object_msg.z = 0.0
                 self.publisher.publish(object_msg)
 
-            # # Draw bounding boxes and class names on the image
-            # for detection in results:
-            #     if detection.boxes.xyxy.shape[0] > 0:
-            #         xyxy = detection.boxes.xyxy[0].to("cpu").numpy()
-            #         x1, y1, x2, y2 = map(int, xyxy)
-            #         class_name = class_names[int(detection.boxes.cls[0])]
-            #         conf = detection.boxes.conf[0]
-            #         cv2.rectangle(cv_image, (x1, y1), (x2, y2), (255, 0, 0), 2)
-            #         cv2.putText(cv_image, f'{class_name} {conf:.2f}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+            # Draw bounding boxes and class names on the image
+            for detection in results:
+                if detection.boxes.xyxy.shape[0] > 0:
+                    xyxy = detection.boxes.xyxy[0].to("cpu").numpy()
+                    x1, y1, x2, y2 = map(int, xyxy)
+                    class_name = class_names[int(detection.boxes.cls[0])]
+                    conf = detection.boxes.conf[0]
+                    cv2.rectangle(cv_image, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                    cv2.putText(cv_image, f'{class_name} {conf:.2f}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
             cv2.imshow("Kinect Camera Image", cv_image)
             cv2.waitKey(1)
