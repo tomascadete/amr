@@ -1,15 +1,14 @@
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Image, PointCloud2
-from sensor_msgs_py import point_cloud2
+from sensor_msgs.msg import Image
 from nav_msgs.msg import Odometry
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
-import torch
 import numpy as np
 import transforms3d as t3d
 from amr_interfaces.msg import Object
 from ultralytics import YOLO
+import time
 
 
 
@@ -60,6 +59,9 @@ class ImageSubscriber(Node):
         default_pose.pose.pose.orientation.w = 1.0
         self.robot_pose = default_pose.pose.pose
         self.depth_map = None
+        self.last_time = time.time()
+        self.frame_count = 0
+        self.display_fps = 0
 
 
     def odom_callback(self, msg):
@@ -75,6 +77,15 @@ class ImageSubscriber(Node):
 
     def listener_callback(self, msg):
         try:
+            current_time = time.time()
+            self.frame_count += 1
+
+            # Calculate FPS every second to reduce the overhead
+            if current_time - self.last_time > 1.0:
+                self.display_fps = self.frame_count / (current_time - self.last_time)
+                self.last_time = current_time
+                self.frame_count = 0
+
             # Convert the ROS Image message to OpenCV format
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
@@ -154,6 +165,10 @@ class ImageSubscriber(Node):
                     conf = detection.boxes.conf[0]
                     cv2.rectangle(cv_image, (x1, y1), (x2, y2), (255, 0, 0), 2)
                     cv2.putText(cv_image, f'{class_name} {conf:.2f}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+
+            fps_text = f'FPS: {self.display_fps:.2f}'
+            cv2.putText(cv_image, fps_text, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+
 
             cv2.imshow("Kinect Camera Image", cv_image)
             cv2.waitKey(1)

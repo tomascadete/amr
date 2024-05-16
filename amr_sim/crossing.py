@@ -27,44 +27,43 @@ class TrackedObject:
         self.steps_since_seen = 0
         self.distances_to_robot = []
         self.is_approaching = True
-        self.y_ascent = None
-        self.y_descent = None
 
     def add_position(self, position, time):
         self.positions.append(position)
         self.timestamps.append(time)
-        # Sort positions based on x value, then y value conditionally
-        if 12 <= position[0] <= 18:
-            # Descending order of y
-            self.positions = sorted(self.positions, key=lambda x: (x[0], -x[1]))
-            self.y_ascent = False
-            self.y_descent = True
-        elif 23 < position[0] <= 29:
-            # Ascending order of y
-            self.positions = sorted(self.positions, key=lambda x: (x[0], x[1]))
-            self.y_ascent = True
-            self.y_descent = False
 
 
-    # This should update the velocity and acceleration
-    # It should always do the average with the rest of the calculated velocities
-    # This will make the velocity more stable and towards the real value
     def update_velocity_and_acceleration(self, time_diff):
         if len(self.positions) > 1:
-            velocity = np.linalg.norm(self.positions[-1] - self.positions[-2]) / time_diff
-            self.velocities.append(velocity)
-
-            if len(self.velocities) > 10:
-                self.velocities.pop(0)
-                acceleration = (self.velocities[-1] - self.velocities[0]) / time_diff
-                self.accelerations.append(acceleration)
-
+            initial_position = self.positions[0]
+            last_position = self.positions[-1]
+            initial_time = self.timestamps[0]
+            last_time = self.timestamps[-1]
+            time_diff = last_time - initial_time
+            if time_diff > 0:
+                # Consider only displacement along the y-axis
+                displacement = last_position[1] - initial_position[1]
+                velocity = displacement / time_diff
+                self.velocities.append(velocity)
+                if len(self.velocities) > 1:
+                    self.velocity = self.calculate_weighted_average(self.velocities)
+            else:
+                self.velocity = 0.0
         else:
-            self.velocities.append(0.0)
+            self.velocity = 0.0
 
-        self.velocity = np.mean(self.velocities)
-        self.acceleration = np.mean(self.accelerations)
+        if len(self.velocities) > 1:
+            previous_velocity = self.velocities[-2]
+            current_velocity = self.velocities[-1]
+            self.acceleration = (current_velocity - previous_velocity) / time_diff
+            self.accelerations.append(self.acceleration)
+        else:
+            self.acceleration = 0.0
 
+
+    def calculate_weighted_average(self,data):
+        weights = np.exp(-0.5*np.arange(len(data))) # The higher the decay rate, the more recent values will be weighted more heavily
+        return np.average(data[-10:], weights=weights[-10:])
             
 
 
@@ -123,7 +122,7 @@ class CrossingNode(Node):
         if not self.crossing:
             return
         self.traffic_light_state = msg.colour
-        self.get_logger().info(f"Traffic light state updated to: {msg.colour}")
+        # self.get_logger().info(f"Traffic light state updated to: {msg.colour}")
 
 
     def odom_callback(self, msg):
@@ -182,21 +181,18 @@ class CrossingNode(Node):
                 # Convert the centroid to world coordinates
                 x_world = (centroid[1] + x_min_grid) * self.resolution + self.grid_origin_x
                 y_world = centroid[0] * self.resolution + self.grid_origin_y
-                if x_world < 19:
-                    x_world = 14.5
-                elif x_world > 20:
-                    x_world = 25.5
                 centroid_world = np.array([x_world, y_world])
                 self.track_objects(centroid_world)
-                
-        # Log the tracked objects predicted next position, velocity, and acceleration
-        # for obj in self.tracked_objects:
-        #     if obj.next_position is not None:
-        #         self.get_logger().info(f"Object {obj.id}: next position = {obj.next_position}, velocity = {obj.velocity}, acceleration = {obj.acceleration}")
+
 
         self.times_ran += 1
         self.safe_to_cross_check()
         self.update_plot()
+
+        # Log the velocities and accelerations of the tracked objects
+        for obj in self.tracked_objects:
+            if len(obj.velocities) > 0:
+                self.get_logger().info(f"Object {obj.id} - Velocity: {obj.velocity:.2f} m/s, Acceleration: {obj.acceleration:.2f} m/s^2")
 
 
         # Check if any tracked object has not been seen for a while
@@ -220,7 +216,7 @@ class CrossingNode(Node):
             pose.pose.position.x = self.crosswalk_exit[0]
             pose.pose.position.y = self.crosswalk_exit[1]
             path_msg.poses.append(pose)
-            self.publisher.publish(path_msg)
+            # self.publisher.publish(path_msg)
 
 
 
@@ -247,16 +243,21 @@ class CrossingNode(Node):
         time_diff = (current_time - self.last_time).nanoseconds / 1e9
         self.last_time = current_time
 
-        # Identify whether the centroid is within the specific x range
-        x_range_y_descent = 12 <= centroid[0] <= 18
-        x_range_y_ascent = 23 < centroid[0] <= 29
+        max_history = 10
+        decay_rate = 0.9
+        # The higher the decay rate, the more recent positions will be weighted more heavily
 
         # Check if the centroid is close to an existing tracked object
         for obj in self.tracked_objects:
-            # Calculate the distance between the centroid and the last position of the object
-            # Take into account that if an object has y_descent, the position vector is sorted in descending order of y
-            distance = np.linalg.norm(centroid - obj.positions[-1])
-            if distance < 5.0 and ((x_range_y_ascent and obj.y_ascent) or (x_range_y_descent and obj.y_descent)):
+            recent_positions = obj.positions[-max_history:]
+            num_positions = len(recent_positions)
+            if num_positions > 0:
+                weights = np.exp(-decay_rate * np.arange(num_positions))[::-1]
+                weighted_sum = np.sum(recent_positions * weights[:, np.newaxis], axis=0)
+                weighted_average_position = weighted_sum / np.sum(weights)
+
+            distance = np.linalg.norm(centroid - weighted_average_position)
+            if distance < 1.0:
                 obj.add_position(centroid, timestamp)
                 obj.steps_since_seen = 0
 
@@ -273,26 +274,24 @@ class CrossingNode(Node):
                     obj.next_position = next_position
 
                     obj.update_velocity_and_acceleration(time_diff)
-                    obj.distances_to_robot.append(np.linalg.norm(next_position - np.array([self.robot_pose.position.x, self.robot_pose.position.y])))
-                    if obj.y_ascent:
-                        obj.is_approaching = obj.positions[-1][1] < 37
-                    elif obj.y_descent:
-                        obj.is_approaching = obj.positions[-1][1] > 37
+                    obj.distances_to_robot.append(np.linalg.norm(centroid - np.array([self.robot_pose.position.x, self.robot_pose.position.y])))
 
+                    if len(obj.distances_to_robot) >= 5:
+                        distances = np.array(obj.distances_to_robot[-5:])
+                        average = np.mean(distances)
+                        if obj.distances_to_robot[-1] > average:
+                            obj.is_approaching = False
+                        else:
+                            obj.is_approaching = True
 
 
                 return
 
-        if x_range_y_ascent or x_range_y_descent:
-            if x_range_y_ascent:
-                new_obj = TrackedObject(self.tracked_objects_id)
-                new_obj.y_ascent = True
-            elif x_range_y_descent:
-                new_obj = TrackedObject(self.tracked_objects_id)
-                new_obj.y_descent = True
-            new_obj.positions.append(centroid)
-            self.tracked_objects_id += 1
-            self.tracked_objects.append(new_obj)
+        
+        new_obj = TrackedObject(self.tracked_objects_id)
+        new_obj.positions.append(centroid)
+        self.tracked_objects_id += 1
+        self.tracked_objects.append(new_obj)
 
 
 
