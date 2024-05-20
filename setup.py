@@ -28,7 +28,8 @@ setup(
             'control = amr_sim.control:main',
             'planner = amr_sim.planner:main',
             'crossing = amr_sim.crossing:main',
-            'traffic_light_detection = amr_sim.traffic_light_detection:main'
+            'traffic_light_detection = amr_sim.traffic_light_detection:main',
+            'trajectory_plotter = amr_sim.trajectory_plotter:main'
         ],
     },
 )
