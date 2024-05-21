@@ -250,7 +250,7 @@ class CrossingNode(Node):
 
                     if len(obj.distances_to_robot) >= 5:
                         distances = np.array(obj.distances_to_robot[-5:])
-                        if obj.distances_to_robot[-1] > obj.distances_to_robot[0]:
+                        if distances[-1] > distances[0]:
                             obj.is_approaching = False
                         else:
                             obj.is_approaching = True

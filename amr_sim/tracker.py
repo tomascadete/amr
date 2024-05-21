@@ -69,7 +69,7 @@ class ObjectTracker(Node):
         # Remove objects that haven't been seen for a while
         for obj in self.tracked_objects:
             obj.steps_since_seen += 1
-            if obj.steps_since_seen > 20:
+            if obj.steps_since_seen > 10:
                 self.tracked_objects.remove(obj)
 
 
@@ -124,8 +124,8 @@ class ObjectTracker(Node):
             if 0 <= grid_x < self.occupancy_grid.info.width and 0 <= grid_y < self.occupancy_grid.info.height:
                 # If the robot is in the crossing procedure, do not add more points to the occupancy grid than necessary
                 if not self.crossing:
-                    for i in range(-3, 3):
-                        for j in range(-3, 3):
+                    for i in range(-4, 4):
+                        for j in range(-4, 4):
                             if 0 <= grid_x + i < self.occupancy_grid.info.width and 0 <= grid_y + j < self.occupancy_grid.info.height:
                                 self.occupancy_grid.data[(grid_y + j) * self.occupancy_grid.info.width + grid_x + i] = 100
                 else:
@@ -138,15 +138,15 @@ class ObjectTracker(Node):
                 grid_x = int((obj.x - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
                 grid_y = int((obj.y - self.occupancy_grid.info.origin.position.y) / self.occupancy_grid.info.resolution)
                 if 0 <= grid_x < self.occupancy_grid.info.width and 0 <= grid_y < self.occupancy_grid.info.height:
-                    for i in range(-3, 3):
-                        for j in range(-3, 3):
+                    for i in range(-2, 2):
+                        for j in range(-2, 2):
                             if 0 <= grid_x + i < self.occupancy_grid.info.width and 0 <= grid_y + j < self.occupancy_grid.info.height:
                                 self.occupancy_grid.data[(grid_y + j) * self.occupancy_grid.info.width + grid_x + i] = 100
 
         # Mark the road as occupied if self.crossing is False
         if not self.crossing:
-            x_min_grid = int((13 - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
-            x_max_grid = int((28 - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
+            x_min_grid = int((12.5 - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
+            x_max_grid = int((28.5 - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
             for i in range(x_min_grid, x_max_grid):
                 for j in range(0, self.occupancy_grid.info.height):
                     index = j * self.occupancy_grid.info.width + i
