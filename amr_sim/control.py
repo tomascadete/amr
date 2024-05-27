@@ -16,8 +16,8 @@ class Controller(Node):
         self.current_pose = None
         self.align_to_zero = False
         self.waypoint_threshold = 0.5  # meters
-        self.angular_threshold = np.pi
-        self.linear_speed = 2.5  # Maximum linear speed
+        self.angular_threshold = np.pi / 2  # radians
+        self.linear_speed = 3.0  # Maximum linear speed
         self.angular_speed = np.pi * 2  # Maximum angular speed
 
     def path_callback(self, msg):

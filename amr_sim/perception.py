@@ -137,7 +137,7 @@ class ImageSubscriber(Node):
                         z_world = z_robot + z_robot_base
 
                         # If the object is higher than 1.5 meters, ignore it
-                        if z_world > 1.5:
+                        if z_world > 2:
                             continue
 
                         object_msg = Object()
