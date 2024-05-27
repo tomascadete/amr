@@ -18,7 +18,7 @@ class Controller(Node):
         self.waypoint_threshold = 0.5  # meters
         self.angular_threshold = np.pi
         self.linear_speed = 2.5  # Maximum linear speed
-        self.angular_speed = np.pi * 4  # Maximum angular speed
+        self.angular_speed = np.pi * 2  # Maximum angular speed
 
     def path_callback(self, msg):
         incoming_path = [(pose.pose.position.x, pose.pose.position.y) for pose in msg.poses]
