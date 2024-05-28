@@ -138,8 +138,8 @@ class ObjectTracker(Node):
                 grid_x = int((obj.x - self.occupancy_grid.info.origin.position.x) / self.occupancy_grid.info.resolution)
                 grid_y = int((obj.y - self.occupancy_grid.info.origin.position.y) / self.occupancy_grid.info.resolution)
                 if 0 <= grid_x < self.occupancy_grid.info.width and 0 <= grid_y < self.occupancy_grid.info.height:
-                    for i in range(-2, 2):
-                        for j in range(-2, 2):
+                    for i in range(-3, 3):
+                        for j in range(-3, 3):
                             if 0 <= grid_x + i < self.occupancy_grid.info.width and 0 <= grid_y + j < self.occupancy_grid.info.height:
                                 self.occupancy_grid.data[(grid_y + j) * self.occupancy_grid.info.width + grid_x + i] = 100
 

@@ -21,8 +21,8 @@ class TrackedObject:
     def update(self, position, timestamp):
         self.positions.append(position)
         self.timestamps.append(timestamp)
-        # Keep only a maximum of 20 positions
-        if len(self.positions) > 20:
+        # Keep only a maximum of 10 positions
+        if len(self.positions) > 10:
             self.positions.pop(0)
             self.timestamps.pop(0)
         self.steps_since_seen = 0
@@ -38,7 +38,7 @@ class TrackedObject:
         model_x = LinearRegression().fit(times, positions[:, 0])
         model_y = LinearRegression().fit(times, positions[:, 1])
 
-        future_times = np.linspace(self.timestamps[-1], self.timestamps[-1] + 10, num=10).reshape(-1, 1)
+        future_times = np.linspace(self.timestamps[-1], self.timestamps[-1] + 20, num=20).reshape(-1, 1)
         future_x = model_x.predict(future_times)
         future_y = model_y.predict(future_times)
 
@@ -46,7 +46,7 @@ class TrackedObject:
         
         
 
-class LocalPlanner(Node):
+class Predictor(Node):
     def __init__(self):
         super().__init__('local_planner')
         self.create_subscription(OccupancyGrid, '/occupancy_grid', self.occupancy_grid_callback, 10)
@@ -140,7 +140,7 @@ class LocalPlanner(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    local_planner = LocalPlanner()
+    local_planner = Predictor()
     rclpy.spin(local_planner)
     local_planner.destroy_node()
     rclpy.shutdown()
