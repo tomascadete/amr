@@ -38,9 +38,19 @@ class TrackedObject:
         model_x = LinearRegression().fit(times, positions[:, 0])
         model_y = LinearRegression().fit(times, positions[:, 1])
 
-        future_times = np.linspace(self.timestamps[-1], self.timestamps[-1] + 20, num=20).reshape(-1, 1)
+        future_times = np.linspace(self.timestamps[-1], self.timestamps[-1] + 30, num=5).reshape(-1, 1)
         future_x = model_x.predict(future_times)
         future_y = model_y.predict(future_times)
+
+        # Identify in which direction movement is more significant
+        total_x_movement = future_x[-1] - future_x[0]
+        total_y_movement = future_y[-1] - future_y[0]
+
+        # If the object is moving more in the x direction, keep the y values constant and equal to the latest y value
+        if abs(total_x_movement) > abs(total_y_movement):
+            future_y = positions[-1][1] * np.ones_like(future_y)
+        else:
+            future_x = positions[-1][0] * np.ones_like(future_x)
 
         self.predicted_positions = np.column_stack((future_x, future_y))
         
@@ -57,9 +67,9 @@ class Predictor(Node):
         self.tracked_objects = []
         self.object_id = 0
 
-        # plt.ion()
-        # self.fig, self.ax = plt.subplots()
-        # self.scatter = None
+        plt.ion()
+        self.fig, self.ax = plt.subplots()
+        self.scatter = None
 
 
     def occupancy_grid_callback(self, msg):
@@ -99,7 +109,7 @@ class Predictor(Node):
             if obj.steps_since_seen > 10:
                 self.tracked_objects.remove(obj)
 
-        # self.update_plot()
+        self.update_plot()
 
         # If the distance between an object's current position and its last predicted position is greater than 1.0 meters, publish an array of predictions
         predictions = PredictionArray()
@@ -117,25 +127,25 @@ class Predictor(Node):
 
         
 
-    # def update_plot(self):
-    #     self.ax.clear()
-    #     positions = [obj.positions[-1] for obj in self.tracked_objects]
-    #     predicted_positions = [pos for obj in self.tracked_objects for pos in obj.predicted_positions]
+    def update_plot(self):
+        self.ax.clear()
+        positions = [obj.positions[-1] for obj in self.tracked_objects]
+        predicted_positions = [pos for obj in self.tracked_objects for pos in obj.predicted_positions]
         
-    #     if positions:
-    #         x, y = zip(*positions)
-    #         self.ax.scatter(x, y, c='blue', label='Current Positions')
+        if positions:
+            x, y = zip(*positions)
+            self.ax.scatter(x, y, c='blue', label='Current Positions')
         
-    #     if predicted_positions:
-    #         px, py = zip(*predicted_positions)
-    #         self.ax.scatter(px, py, c='red', marker='x', label='Predicted Positions')
-    #     self.ax.set_xlim(-20, 50)
-    #     self.ax.set_ylim(-30, 50)
-    #     self.ax.set_xlabel('X')
-    #     self.ax.set_ylabel('Y')
-    #     self.ax.set_title('Tracked Objects')
-    #     plt.draw()
-    #     plt.pause(0.001)
+        if predicted_positions:
+            px, py = zip(*predicted_positions)
+            self.ax.scatter(px, py, c='red', marker='x', label='Predicted Positions')
+        self.ax.set_xlim(-30, 50)
+        self.ax.set_ylim(-30, 50)
+        self.ax.set_xlabel('X')
+        self.ax.set_ylabel('Y')
+        self.ax.set_title('Tracked Objects')
+        plt.draw()
+        plt.pause(0.001)
 
 
 def main(args=None):

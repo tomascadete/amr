@@ -82,8 +82,8 @@ class CrossingNode(Node):
     def mark_path_as_occupied(self, start, end):
         points = self.bresenham_line(start, end)
         for p in points:
-            for a in range(-4, 4):
-                for b in range(-4, 4):
+            for a in range(-3, 3):
+                for b in range(-3, 3):
                     if 0 <= p[0] + a < self.grid.shape[0] and 0 <= p[1] + b < self.grid.shape[1]:
                         self.grid[p[0] + a, p[1] + b] = 100
 

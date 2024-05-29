@@ -4,6 +4,7 @@ from nav_msgs.msg import Odometry, Path
 from geometry_msgs.msg import Twist, PoseStamped
 import numpy as np
 import transforms3d as t3d
+from amr_interfaces.msg import Emergency
 
 
 class Controller(Node):
@@ -11,14 +12,27 @@ class Controller(Node):
         super().__init__('controller')
         self.subscription_path = self.create_subscription(Path, '/path', self.path_callback, 10)
         self.subscription_odom = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
+        self.subscription_emergency = self.create_subscription(Emergency, '/emergency', self.emergency_callback, 10)
         self.publisher_vel = self.create_publisher(Twist, '/cmd_vel', 10)
         self.current_path = []
         self.current_pose = None
         self.align_to_zero = False
         self.waypoint_threshold = 0.5  # meters
-        self.angular_threshold = np.pi / 6  # radians
+        self.angular_threshold = np.pi / 2  # radians
         self.linear_speed = 5.0  # Maximum linear speed
-        self.angular_speed = np.pi * 4  # Maximum angular speed
+        self.angular_speed = np.pi * 2  # Maximum angular speed
+        self.emergency_state = False
+
+    def emergency_callback(self, msg):
+        if msg.emergency_state == 1:
+            self.emergency_state = True
+            self.linear_speed = 15.0
+            self.angular_speed = np.pi * 4
+        elif msg.emergency_state == 0:
+            self.emergency_state = False
+            self.linear_speed = 3.0
+            self.angular_speed = np.pi * 2
+
 
     def path_callback(self, msg):
         incoming_path = [(pose.pose.position.x, pose.pose.position.y) for pose in msg.poses]

@@ -5,7 +5,8 @@ from geometry_msgs.msg import PoseStamped
 from scipy.spatial.distance import euclidean
 from queue import PriorityQueue
 import numpy as np
-from amr_interfaces.msg import PredictionArray, Prediction
+from amr_interfaces.msg import PredictionArray, Prediction, Emergency
+from matplotlib import pyplot as plt
 
 class MovingObstacle:
     def __init__(self, position, predicted_position):
@@ -42,6 +43,7 @@ class Planner(Node):
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.create_subscription(PredictionArray, '/predictions', self.predictions_callback, 10)
         self.publisher_ = self.create_publisher(Path, '/path', 10)
+        self.emergency_publisher = self.create_publisher(Emergency, '/emergency', 10)
         self.crosswalk_entry = np.array([12.0, 37.0])  # Entry point to the crosswalk
         self.crosswalk_exit = np.array([29.0, 37.0])  # Exit point from the crosswalk
         self.goal = self.crosswalk_entry
@@ -51,6 +53,10 @@ class Planner(Node):
         self.grid_origin = None  # To be defined based on grid metadata
         self.planning_active = True
         self.moving_obstacles = []
+
+        # plt.ion()
+        # self.fig, self.ax = plt.subplots()
+
 
     def predictions_callback(self, msg):
         self.moving_obstacles = []
@@ -87,6 +93,19 @@ class Planner(Node):
             # self.get_logger().info(f'Obstacle from {current_grid_pos} to {predicted_grid_pos} in grid coordinates')
             self.mark_path_as_occupied(current_grid_pos, predicted_grid_pos)
 
+        # self.update_plot()
+
+    # def update_plot(self):
+    #     if self.grid is None:
+    #         return
+    #     self.ax.clear()
+    #     self.ax.imshow(self.grid, cmap='gray', origin='lower')
+    #     self.ax.set_title('Occupancy Grid with Obstacles')
+    #     self.ax.set_xlabel('X')
+    #     self.ax.set_ylabel('Y')
+    #     plt.draw()
+    #     plt.pause(0.001)
+
     def world_to_grid(self, world_position):
         grid_x = int((world_position[1] / self.resolution) + self.grid_origin[1])
         grid_y = int((world_position[0] / self.resolution) + self.grid_origin[0])
@@ -95,8 +114,8 @@ class Planner(Node):
     def mark_path_as_occupied(self, start, end):
         points = self.bresenham_line(start, end)
         for p in points:
-            for a in range(-4, 4):
-                for b in range(-4, 4):
+            for a in range(-3, 3):
+                for b in range(-3, 3):
                     if 0 <= p[0] + a < self.grid.shape[0] and 0 <= p[1] + b < self.grid.shape[1]:
                         self.grid[p[0] + a, p[1] + b] = 100
                         # self.get_logger().info(f'Grid updated at ({p[0] + a}, {p[1] + b})')
@@ -133,16 +152,29 @@ class Planner(Node):
             return
 
         start = (int(self.robot_pose[1] / self.resolution + self.grid_origin[1]),
-                 int(self.robot_pose[0] / self.resolution + self.grid_origin[0]))
+                int(self.robot_pose[0] / self.resolution + self.grid_origin[0]))
         goal = (int(self.goal[1] / self.resolution + self.grid_origin[1]),
                 int(self.goal[0] / self.resolution + self.grid_origin[0]))
-        
+
         if not(0 <= goal[0] < self.grid.shape[0] and 0 <= goal[1] < self.grid.shape[1]):
             self.get_logger().warn('Goal position is out of bounds')
             return
         if self.grid[goal] == 100:
             self.get_logger().warn('Goal position is in an obstacle')
-            return
+
+        if self.grid[start] == 100:
+            self.get_logger().warn('Robot is in an obstacle')
+            start = self.nearest_free_cell_in_direction(start, goal)
+            if start is None:
+                self.get_logger().warn('No free cell found')
+                return
+            msg = Emergency()
+            msg.emergency_state = 1
+            self.emergency_publisher.publish(msg)
+        else:
+            msg = Emergency()
+            msg.emergency_state = 0
+            self.emergency_publisher.publish(msg)
 
         frontier = PriorityQueue()
         frontier.put((0, tuple(start)))
@@ -154,9 +186,16 @@ class Planner(Node):
         directions = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
         movement_cost = {d: 1 if d[0] == 0 or d[1] == 0 else np.sqrt(2) for d in directions}
         goal_reached = False
+        closest_point = start
+        closest_distance = self.heuristic(start, goal)
 
         while not frontier.empty():
             current = frontier.get()[1]
+            current_distance = self.heuristic(current, goal)
+
+            if current_distance < closest_distance:
+                closest_distance = current_distance
+                closest_point = current
 
             if np.array_equal(current, goal):
                 goal_reached = True
@@ -173,13 +212,11 @@ class Planner(Node):
                         frontier.put((priority, neighbor))
                         came_from[neighbor] = current
 
-        if not goal_reached:
-            self.get_logger().warn('Goal is unreachable')
-            return
-
         path = []
-        if tuple(goal) in came_from:
-            step = tuple(goal)
+        end_point = goal if goal_reached else closest_point
+
+        if tuple(end_point) in came_from:
+            step = tuple(end_point)
             while step != tuple(start):
                 path.append(step)
                 step = came_from[step]
@@ -188,9 +225,9 @@ class Planner(Node):
         else:
             self.get_logger().warn('No path found')
             return
-        
+
         simplified_path = douglas_peucker(np.array(path), 0.5)
-        
+
         if len(simplified_path) > 2:
             simplified_path = simplified_path[2:]
         else:
@@ -209,6 +246,30 @@ class Planner(Node):
             ros_path.poses.append(pose)
 
         self.publisher_.publish(ros_path)
+        # self.get_logger().info('Path published')
+
+    def nearest_free_cell_in_direction(self, start, goal):
+        frontier = PriorityQueue()
+        frontier.put((0, start))
+        visited = set()
+        visited.add(start)
+        directions = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+
+        while not frontier.empty():
+            current = frontier.get()[1]
+
+            if self.grid[current] != 100:
+                return current
+
+            for dx, dy in directions:
+                neighbor = (current[0] + dx, current[1] + dy)
+                if 0 <= neighbor[0] < self.grid.shape[0] and 0 <= neighbor[1] < self.grid.shape[1] and neighbor not in visited:
+                    frontier.put((self.heuristic(neighbor, goal), neighbor))
+                    visited.add(neighbor)
+
+        return None
+
+
 
 def main(args=None):
     rclpy.init(args=args)
