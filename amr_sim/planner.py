@@ -114,8 +114,8 @@ class Planner(Node):
     def mark_path_as_occupied(self, start, end):
         points = self.bresenham_line(start, end)
         for p in points:
-            for a in range(-3, 3):
-                for b in range(-3, 3):
+            for a in range(-2, 2):
+                for b in range(-2, 2):
                     if 0 <= p[0] + a < self.grid.shape[0] and 0 <= p[1] + b < self.grid.shape[1]:
                         self.grid[p[0] + a, p[1] + b] = 100
                         # self.get_logger().info(f'Grid updated at ({p[0] + a}, {p[1] + b})')

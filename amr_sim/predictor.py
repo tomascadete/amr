@@ -21,8 +21,8 @@ class TrackedObject:
     def update(self, position, timestamp):
         self.positions.append(position)
         self.timestamps.append(timestamp)
-        # Keep only a maximum of 10 positions
-        if len(self.positions) > 10:
+        # Keep only a maximum of 20 positions
+        if len(self.positions) > 20:
             self.positions.pop(0)
             self.timestamps.pop(0)
         self.steps_since_seen = 0
@@ -37,22 +37,19 @@ class TrackedObject:
 
         model_x = LinearRegression().fit(times, positions[:, 0])
         model_y = LinearRegression().fit(times, positions[:, 1])
-
-        future_times = np.linspace(self.timestamps[-1], self.timestamps[-1] + 30, num=5).reshape(-1, 1)
+        future_times = np.linspace(self.timestamps[-1], self.timestamps[-1] + 30, num=10).reshape(-1, 1)
         future_x = model_x.predict(future_times)
         future_y = model_y.predict(future_times)
 
-        # Identify in which direction movement is more significant
-        total_x_movement = future_x[-1] - future_x[0]
-        total_y_movement = future_y[-1] - future_y[0]
-
-        # If the object is moving more in the x direction, keep the y values constant and equal to the latest y value
-        if abs(total_x_movement) > abs(total_y_movement):
-            future_y = positions[-1][1] * np.ones_like(future_y)
+        # If movement along one of the axis is way more significant than the other, keep the prediction for that axis and replace the other with the last known position constant
+        if abs(future_x[-1] - future_x[0]) > 2 * abs(future_y[-1] - future_y[0]):
+            future_positions = np.column_stack((future_x, np.full_like(future_x, self.positions[-1][1])))
+        elif abs(future_y[-1] - future_y[0]) > 2 * abs(future_x[-1] - future_x[0]):
+            future_positions = np.column_stack((np.full_like(future_y, self.positions[-1][0]), future_y))
         else:
-            future_x = positions[-1][0] * np.ones_like(future_x)
+            future_positions = np.column_stack((future_x, future_y))
 
-        self.predicted_positions = np.column_stack((future_x, future_y))
+        self.predicted_positions = future_positions.tolist()
         
         
 
