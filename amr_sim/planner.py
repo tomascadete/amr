@@ -87,6 +87,16 @@ class Planner(Node):
         self.grid = np.array(msg.data).reshape((msg.info.height, msg.info.width))
         self.grid_origin = np.array([msg.info.width / 2, msg.info.height / 2])
 
+        # Mark the road area as occupied if self.planning_active is true
+        if self.planning_active:
+            x_min_grid = int((12.5 - msg.info.origin.position.x) / msg.info.resolution)
+            x_max_grid = int((28.5 - msg.info.origin.position.x) / msg.info.resolution)
+            for i in range (x_min_grid, x_max_grid):
+                for j in range(0, msg.info.height):
+                    if 0 <= i < msg.info.width and 0 <= j < msg.info.height:
+                        self.grid[j, i] = 100
+
+        # Mark the moving obstacles' predicted trajectory as occupied
         for obstacle in self.moving_obstacles:
             current_grid_pos = self.world_to_grid(obstacle.position)
             predicted_grid_pos = self.world_to_grid(obstacle.predicted_position)
@@ -114,8 +124,8 @@ class Planner(Node):
     def mark_path_as_occupied(self, start, end):
         points = self.bresenham_line(start, end)
         for p in points:
-            for a in range(-2, 2):
-                for b in range(-2, 2):
+            for a in range(-3, 3):
+                for b in range(-3, 3):
                     if 0 <= p[0] + a < self.grid.shape[0] and 0 <= p[1] + b < self.grid.shape[1]:
                         self.grid[p[0] + a, p[1] + b] = 100
                         # self.get_logger().info(f'Grid updated at ({p[0] + a}, {p[1] + b})')

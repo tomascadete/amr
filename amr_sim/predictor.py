@@ -37,7 +37,7 @@ class TrackedObject:
 
         model_x = LinearRegression().fit(times, positions[:, 0])
         model_y = LinearRegression().fit(times, positions[:, 1])
-        future_times = np.linspace(self.timestamps[-1], self.timestamps[-1] + 30, num=10).reshape(-1, 1)
+        future_times = np.linspace(self.timestamps[-1], self.timestamps[-1] + 20, num=10).reshape(-1, 1)
         future_x = model_x.predict(future_times)
         future_y = model_y.predict(future_times)
 

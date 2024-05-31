@@ -18,7 +18,7 @@ class Controller(Node):
         self.current_pose = None
         self.align_to_zero = False
         self.waypoint_threshold = 0.5  # meters
-        self.angular_threshold = np.pi / 2  # radians
+        self.angular_threshold = np.pi / 6  # radians
         self.linear_speed = 3.0  # Maximum linear speed
         self.angular_speed = np.pi * 2  # Maximum angular speed
         self.emergency_state = False
@@ -27,12 +27,12 @@ class Controller(Node):
     def emergency_callback(self, msg):
         if msg.emergency_state == 1:
             self.emergency_state = True
-            self.linear_speed = 5.0
+            self.linear_speed = 10.0
             self.angular_threshold = np.pi
         elif msg.emergency_state == 0:
             self.emergency_state = False
             self.linear_speed = 3.0
-            self.angular_threshold = np.pi / 2
+            self.angular_threshold = np.pi / 6
 
 
 
