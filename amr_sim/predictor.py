@@ -64,9 +64,9 @@ class Predictor(Node):
         self.tracked_objects = []
         self.object_id = 0
 
-        plt.ion()
-        self.fig, self.ax = plt.subplots()
-        self.scatter = None
+        # plt.ion()
+        # self.fig, self.ax = plt.subplots()
+        # self.scatter = None
 
 
     def occupancy_grid_callback(self, msg):
@@ -106,7 +106,7 @@ class Predictor(Node):
             if obj.steps_since_seen > 10:
                 self.tracked_objects.remove(obj)
 
-        self.update_plot()
+        # self.update_plot()
 
         # If the distance between an object's current position and its last predicted position is greater than 1.0 meters, publish an array of predictions
         predictions = PredictionArray()
@@ -124,25 +124,25 @@ class Predictor(Node):
 
         
 
-    def update_plot(self):
-        self.ax.clear()
-        positions = [obj.positions[-1] for obj in self.tracked_objects]
-        predicted_positions = [pos for obj in self.tracked_objects for pos in obj.predicted_positions]
+    # def update_plot(self):
+    #     self.ax.clear()
+    #     positions = [obj.positions[-1] for obj in self.tracked_objects]
+    #     predicted_positions = [pos for obj in self.tracked_objects for pos in obj.predicted_positions]
         
-        if positions:
-            x, y = zip(*positions)
-            self.ax.scatter(x, y, c='blue', label='Current Positions')
+    #     if positions:
+    #         x, y = zip(*positions)
+    #         self.ax.scatter(x, y, c='blue', label='Current Positions')
         
-        if predicted_positions:
-            px, py = zip(*predicted_positions)
-            self.ax.scatter(px, py, c='red', marker='x', label='Predicted Positions')
-        self.ax.set_xlim(-30, 50)
-        self.ax.set_ylim(-30, 50)
-        self.ax.set_xlabel('X')
-        self.ax.set_ylabel('Y')
-        self.ax.set_title('Tracked Objects')
-        plt.draw()
-        plt.pause(0.001)
+    #     if predicted_positions:
+    #         px, py = zip(*predicted_positions)
+    #         self.ax.scatter(px, py, c='red', marker='x', label='Predicted Positions')
+    #     self.ax.set_xlim(-30, 50)
+    #     self.ax.set_ylim(-30, 50)
+    #     self.ax.set_xlabel('X')
+    #     self.ax.set_ylabel('Y')
+    #     self.ax.set_title('Tracked Objects')
+    #     plt.draw()
+    #     plt.pause(0.001)
 
 
 def main(args=None):

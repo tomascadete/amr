@@ -53,9 +53,10 @@ class Planner(Node):
         self.grid_origin = None  # To be defined based on grid metadata
         self.planning_active = True
         self.moving_obstacles = []
+        self.previous_path = None
 
-        # plt.ion()
-        # self.fig, self.ax = plt.subplots()
+        plt.ion()
+        self.fig, self.ax = plt.subplots()
 
 
     def predictions_callback(self, msg):
@@ -103,18 +104,18 @@ class Planner(Node):
             # self.get_logger().info(f'Obstacle from {current_grid_pos} to {predicted_grid_pos} in grid coordinates')
             self.mark_path_as_occupied(current_grid_pos, predicted_grid_pos)
 
-        # self.update_plot()
+        self.update_plot()
 
-    # def update_plot(self):
-    #     if self.grid is None:
-    #         return
-    #     self.ax.clear()
-    #     self.ax.imshow(self.grid, cmap='gray', origin='lower')
-    #     self.ax.set_title('Occupancy Grid with Obstacles')
-    #     self.ax.set_xlabel('X')
-    #     self.ax.set_ylabel('Y')
-    #     plt.draw()
-    #     plt.pause(0.001)
+    def update_plot(self):
+        if self.grid is None:
+            return
+        self.ax.clear()
+        self.ax.imshow(self.grid, cmap='gray', origin='lower')
+        self.ax.set_title('Occupancy Grid with Obstacles')
+        self.ax.set_xlabel('X')
+        self.ax.set_ylabel('Y')
+        plt.draw()
+        plt.pause(0.001)
 
     def world_to_grid(self, world_position):
         grid_x = int((world_position[1] / self.resolution) + self.grid_origin[1])
@@ -174,13 +175,18 @@ class Planner(Node):
 
         if self.grid[start] == 100:
             self.get_logger().warn('Robot is in an obstacle')
-            start = self.nearest_free_cell_in_direction(start, goal)
-            if start is None:
-                self.get_logger().warn('No free cell found')
-                return
             msg = Emergency()
             msg.emergency_state = 1
             self.emergency_publisher.publish(msg)
+            # Publish the previous path with the first waypoint removed until the robot is out of the obstacle's way
+            if self.previous_path is not None:
+                # Remove the first waypoint if there are at least two waypoints
+                if len(self.previous_path.poses) > 1:
+                    self.previous_path.poses = self.previous_path.poses[1:]
+                self.publisher_.publish(self.previous_path)
+                
+            return
+
         else:
             msg = Emergency()
             msg.emergency_state = 0
@@ -254,6 +260,7 @@ class Planner(Node):
             pose.pose.position.x = world_x
             pose.pose.position.y = world_y
             ros_path.poses.append(pose)
+            self.previous_path = ros_path
 
         self.publisher_.publish(ros_path)
         # self.get_logger().info('Path published')

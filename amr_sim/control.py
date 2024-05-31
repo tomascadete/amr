@@ -27,8 +27,8 @@ class Controller(Node):
     def emergency_callback(self, msg):
         if msg.emergency_state == 1:
             self.emergency_state = True
-            self.linear_speed = 10.0
-            self.angular_threshold = np.pi
+            self.linear_speed = 5.0
+            self.angular_threshold = np.pi / 2
         elif msg.emergency_state == 0:
             self.emergency_state = False
             self.linear_speed = 3.0
