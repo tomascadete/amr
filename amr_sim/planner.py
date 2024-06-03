@@ -55,8 +55,8 @@ class Planner(Node):
         self.moving_obstacles = []
         self.previous_path = None
 
-        plt.ion()
-        self.fig, self.ax = plt.subplots()
+        # plt.ion()
+        # self.fig, self.ax = plt.subplots()
 
 
     def predictions_callback(self, msg):
@@ -104,18 +104,18 @@ class Planner(Node):
             # self.get_logger().info(f'Obstacle from {current_grid_pos} to {predicted_grid_pos} in grid coordinates')
             self.mark_path_as_occupied(current_grid_pos, predicted_grid_pos)
 
-        self.update_plot()
+        # self.update_plot()
 
-    def update_plot(self):
-        if self.grid is None:
-            return
-        self.ax.clear()
-        self.ax.imshow(self.grid, cmap='gray', origin='lower')
-        self.ax.set_title('Occupancy Grid with Obstacles')
-        self.ax.set_xlabel('X')
-        self.ax.set_ylabel('Y')
-        plt.draw()
-        plt.pause(0.001)
+    # def update_plot(self):
+    #     if self.grid is None:
+    #         return
+    #     self.ax.clear()
+    #     self.ax.imshow(self.grid, cmap='gray', origin='lower')
+    #     self.ax.set_title('Occupancy Grid with Obstacles')
+    #     self.ax.set_xlabel('X')
+    #     self.ax.set_ylabel('Y')
+    #     plt.draw()
+    #     plt.pause(0.001)
 
     def world_to_grid(self, world_position):
         grid_x = int((world_position[1] / self.resolution) + self.grid_origin[1])
@@ -178,13 +178,14 @@ class Planner(Node):
             msg = Emergency()
             msg.emergency_state = 1
             self.emergency_publisher.publish(msg)
-            # Publish the previous path with the first waypoint removed until the robot is out of the obstacle's way
-            if self.previous_path is not None:
-                # Remove the first waypoint if there are at least two waypoints
-                if len(self.previous_path.poses) > 1:
-                    self.previous_path.poses = self.previous_path.poses[1:]
-                self.publisher_.publish(self.previous_path)
-                
+            apf_path = self.generate_apf_path()
+            if apf_path is not None:
+                self.publisher_.publish(apf_path)                
+                # Log all the waypoints in the path
+                for pose in apf_path.poses:
+                    self.get_logger().info(f'Waypoint: ({pose.pose.position.x:.2f}, {pose.pose.position.y:.2f})')
+
+
             return
 
         else:
@@ -264,6 +265,50 @@ class Planner(Node):
 
         self.publisher_.publish(ros_path)
         # self.get_logger().info('Path published')
+
+
+
+    def generate_apf_path(self):
+        current_position = self.robot_pose
+        goal_position = self.goal
+        path = Path()
+        path.header.stamp = self.get_clock().now().to_msg()
+        path.header.frame_id = "map"
+
+        eta = 0.05  # Attractive force coefficient
+        zeta = 0.95  # Repulsive force coefficient
+        Q_star = 10.0    # Distance threshold for repulsive force
+
+        max_iterations = 100
+        threshold = 0.5
+
+        for _ in range(max_iterations):
+            force = np.zeros(2)
+            force += eta * (goal_position - current_position)
+            for obstacle in self.moving_obstacles:
+                distance = euclidean(current_position, obstacle.position)
+                if distance < Q_star:
+                    repulsive_force = zeta * (1.0 / distance - 1.0 / Q_star) * (1.0 / distance ** 2) * (current_position - obstacle.position) / distance
+                    force += repulsive_force
+
+            # Update position
+            new_position = current_position + force * 1.0
+            if np.linalg.norm(new_position - goal_position) < threshold:
+                break
+            current_position = new_position
+            path_point = PoseStamped()
+            path_point.header.stamp = path.header.stamp
+            path_point.header.frame_id = path.header.frame_id
+            path_point.pose.position.x = current_position[0]
+            path_point.pose.position.y = current_position[1]
+            path.poses.append(path_point)
+
+        return path
+
+
+
+
+
 
     def nearest_free_cell_in_direction(self, start, goal):
         frontier = PriorityQueue()
