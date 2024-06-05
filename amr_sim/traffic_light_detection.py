@@ -9,7 +9,8 @@ import numpy as np
 from ultralytics import YOLO
 from amr_interfaces.msg import LightColour
 
-model = YOLO("traffic_light.pt")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = YOLO("traffic_light.pt").to(device)
 
 class TrafficLightDetection(Node):
     def __init__(self):

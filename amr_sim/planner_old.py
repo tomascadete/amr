@@ -290,55 +290,57 @@ class Planner(Node):
         path.header.stamp = self.get_clock().now().to_msg()
         path.header.frame_id = "map"
 
-        eta = 1.0  # Attractive force coefficient
+        eta = 0.4  # Attractive force coefficient
         zeta = 10.0  # Repulsive force coefficient
         Q_star = 10.0  # Distance threshold for repulsive force
+        waypoint_distance_threshold = 1.0
 
-        force = np.zeros(2)
-        attractive_force = eta * (goal_position - current_position) / np.linalg.norm(goal_position - current_position)
-        force += attractive_force
+        max_iterations = 1000
+        threshold = 0.5
 
-        # Repulsive force calculation
-        for obstacle in self.moving_obstacles:
-            distance = np.linalg.norm(current_position - obstacle.position)
-            if distance < Q_star:
-                repulsive_force = zeta * (1.0 / distance - 1.0 / Q_star) * (1.0 / distance ** 2) * (current_position - obstacle.position)
-                force += repulsive_force
+        for iteration in range(max_iterations):
+            force = np.zeros(2)
+            # Attractive force towards the goal
+            attractive_force = eta * (goal_position - current_position)
+            force += attractive_force
 
-        # Normalize the force to get the direction
-        if np.linalg.norm(force) > 0:
-            force_direction = force / np.linalg.norm(force)
-        else:
-            force_direction = np.array([0.0, 0.0])
+            # Repulsive forces from obstacles
+            for obstacle in self.moving_obstacles:
+                distance = euclidean(current_position, obstacle.position)
+                if distance < Q_star:
+                    repulsive_force = zeta * (1.0 / distance - 1.0 / Q_star) * (1.0 / distance ** 2) * (current_position - obstacle.position) / distance
+                    force += repulsive_force
 
-        # Search for the first free cell in the direction of the force
-        max_distance = 10.0
-        step_size = self.resolution
-        test_position = current_position
-        free_position = None
+            # Update position
+            new_position = current_position + force * 0.1
+            if np.linalg.norm(new_position - goal_position) < threshold:
+                # self.get_logger().info(f'Reached goal position at iteration {iteration}')
+                break
 
-        for step in range(int(max_distance / step_size)):
-            test_position = test_position + force_direction * step_size * step
-            grid_position = self.world_to_grid(test_position)
+            # Check if the new position is a significant waypoint
+            if np.linalg.norm(new_position - current_position) >= waypoint_distance_threshold:
+                path_point = PoseStamped()
+                path_point.header.stamp = path.header.stamp
+                path_point.header.frame_id = path.header.frame_id
+                path_point.pose.position.x = new_position[0]
+                path_point.pose.position.y = new_position[1]
+                path.poses.append(path_point)
+                self.waypoint_found = True
+                # self.get_logger().info(f'Added waypoint at ({new_position[0]:.2f}, {new_position[1]:.2f})')
 
-            if 0 <= grid_position[0] < self.grid.shape[0] and 0 <= grid_position[1] < self.grid.shape[1]:
-                if self.grid[grid_position[0], grid_position[1]] != 100:
-                    free_position = test_position
-                    # Break only if the free cell is at least 2m away from the robot
-                    if np.linalg.norm(free_position - current_position) > 2.0:
+            current_position = new_position
+
+            # Stop if a free position is reached in the path
+            grid_position = self.world_to_grid(current_position)
+            if self.waypoint_found:
+                if 0 <= grid_position[0] < self.grid.shape[0] and 0 <= grid_position[1] < self.grid.shape[1]:
+                    if self.grid[grid_position[0], grid_position[1]] != 100:
+                        # self.get_logger().info(f'Found free cell at grid position {grid_position}')
                         break
 
-        # Check if an unoccupied cell was found
-        if free_position is not None:
-            path_point = PoseStamped()
-            path_point.header.stamp = path.header.stamp
-            path_point.header.frame_id = path.header.frame_id
-            path_point.pose.position.x = free_position[0]
-            path_point.pose.position.y = free_position[1]   
-            path.poses.append(path_point)
-
-        # Log the waypoint
-        self.get_logger().info(f'Waypoint: ({path_point.pose.position.x:.2f}, {path_point.pose.position.y:.2f})')
+        # Log all the waypoints in the path
+        for pose in path.poses:
+            self.get_logger().info(f'Waypoint: ({pose.pose.position.x:.2f}, {pose.pose.position.y:.2f})')
 
         return path
 
