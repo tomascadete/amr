@@ -5,7 +5,7 @@ from geometry_msgs.msg import PoseStamped
 from scipy.spatial.distance import euclidean
 from queue import PriorityQueue
 import numpy as np
-from amr_interfaces.msg import PredictionArray, Prediction, Emergency
+from amr_interfaces.msg import PredictionArray, Prediction, Emergency, LightColour
 from matplotlib import pyplot as plt
 
 class MovingObstacle:
@@ -42,6 +42,7 @@ class Planner(Node):
         self.create_subscription(OccupancyGrid, '/occupancy_grid', self.occupancy_grid_callback, 10)
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.create_subscription(PredictionArray, '/predictions', self.predictions_callback, 10)
+        self.create_subscription(LightColour, '/light_status', self.traffic_light_callback, 10)
         self.publisher_ = self.create_publisher(Path, '/path', 10)
         self.emergency_publisher = self.create_publisher(Emergency, '/emergency', 10)
         self.crosswalk_entry = np.array([12.0, 37.0])  # Entry point to the crosswalk
@@ -54,9 +55,17 @@ class Planner(Node):
         self.planning_active = True
         self.moving_obstacles = []
         self.previous_path = None
+        self.traffic_light_state = None
+        self.started_crossing_flag = False
+        self.waypoint_found = False
 
-        # plt.ion()
-        # self.fig, self.ax = plt.subplots()
+        plt.ion()
+        self.fig, self.ax = plt.subplots()
+
+    def traffic_light_callback(self, msg):
+        self.traffic_light_state = msg.colour
+        # Log the traffic light state
+        # self.get_logger().info(f'Traffic light state: {self.traffic_light_state}')
 
 
     def predictions_callback(self, msg):
@@ -79,17 +88,23 @@ class Planner(Node):
         distance_to_entry = np.linalg.norm(self.robot_pose - self.crosswalk_entry)
         distance_to_exit = np.linalg.norm(self.robot_pose - self.crosswalk_exit)
         if distance_to_entry < 1.0:
-            self.planning_active = False
+            if not self.started_crossing_flag:
+                self.planning_active = False
+            self.goal = self.crosswalk_exit
+            if self.traffic_light_state == 'green':
+                self.planning_active = True
+                self.started_crossing_flag = True
         elif distance_to_exit < 1.0:
             self.goal = np.array([40.0, -30.0])
             self.planning_active = True
+            self.started_crossing_flag = False
 
     def occupancy_grid_callback(self, msg):
         self.grid = np.array(msg.data).reshape((msg.info.height, msg.info.width))
         self.grid_origin = np.array([msg.info.width / 2, msg.info.height / 2])
 
-        # Mark the road area as occupied if self.planning_active is true
-        if self.planning_active:
+        # Mark the road area as occupied if self.planning_active is true and not started crossing
+        if self.planning_active and not self.started_crossing_flag:
             x_min_grid = int((12.5 - msg.info.origin.position.x) / msg.info.resolution)
             x_max_grid = int((28.5 - msg.info.origin.position.x) / msg.info.resolution)
             for i in range (x_min_grid, x_max_grid):
@@ -104,18 +119,18 @@ class Planner(Node):
             # self.get_logger().info(f'Obstacle from {current_grid_pos} to {predicted_grid_pos} in grid coordinates')
             self.mark_path_as_occupied(current_grid_pos, predicted_grid_pos)
 
-        # self.update_plot()
+        self.update_plot()
 
-    # def update_plot(self):
-    #     if self.grid is None:
-    #         return
-    #     self.ax.clear()
-    #     self.ax.imshow(self.grid, cmap='gray', origin='lower')
-    #     self.ax.set_title('Occupancy Grid with Obstacles')
-    #     self.ax.set_xlabel('X')
-    #     self.ax.set_ylabel('Y')
-    #     plt.draw()
-    #     plt.pause(0.001)
+    def update_plot(self):
+        if self.grid is None:
+            return
+        self.ax.clear()
+        self.ax.imshow(self.grid, cmap='gray', origin='lower')
+        self.ax.set_title('Occupancy Grid with Obstacles')
+        self.ax.set_xlabel('X')
+        self.ax.set_ylabel('Y')
+        plt.draw()
+        plt.pause(0.001)
 
     def world_to_grid(self, world_position):
         grid_x = int((world_position[1] / self.resolution) + self.grid_origin[1])
@@ -125,8 +140,8 @@ class Planner(Node):
     def mark_path_as_occupied(self, start, end):
         points = self.bresenham_line(start, end)
         for p in points:
-            for a in range(-3, 3):
-                for b in range(-3, 3):
+            for a in range(-2, 2):
+                for b in range(-2, 2):
                     if 0 <= p[0] + a < self.grid.shape[0] and 0 <= p[1] + b < self.grid.shape[1]:
                         self.grid[p[0] + a, p[1] + b] = 100
                         # self.get_logger().info(f'Grid updated at ({p[0] + a}, {p[1] + b})')
@@ -173,7 +188,8 @@ class Planner(Node):
         if self.grid[goal] == 100:
             self.get_logger().warn('Goal position is in an obstacle')
 
-        if self.grid[start] == 100:
+        robot_distance_to_crosswalk = np.linalg.norm(self.robot_pose - self.crosswalk_entry)
+        if self.grid[start] == 100 and robot_distance_to_crosswalk > 1.0:
             self.get_logger().warn('Robot is in an obstacle')
             msg = Emergency()
             msg.emergency_state = 1
@@ -182,8 +198,8 @@ class Planner(Node):
             if apf_path is not None:
                 self.publisher_.publish(apf_path)                
                 # Log all the waypoints in the path
-                for pose in apf_path.poses:
-                    self.get_logger().info(f'Waypoint: ({pose.pose.position.x:.2f}, {pose.pose.position.y:.2f})')
+                # for pose in apf_path.poses:
+                #     self.get_logger().info(f'Waypoint: ({pose.pose.position.x:.2f}, {pose.pose.position.y:.2f})')
 
 
             return
@@ -267,24 +283,29 @@ class Planner(Node):
         # self.get_logger().info('Path published')
 
 
-
+    # TODO: Fix this function (it's not generating any path at the moment)
     def generate_apf_path(self):
-        current_position = self.robot_pose
+        current_position = np.copy(self.robot_pose)
         goal_position = self.goal
         path = Path()
         path.header.stamp = self.get_clock().now().to_msg()
         path.header.frame_id = "map"
 
-        eta = 0.05  # Attractive force coefficient
-        zeta = 0.95  # Repulsive force coefficient
-        Q_star = 10.0    # Distance threshold for repulsive force
+        eta = 1.0  # Attractive force coefficient
+        zeta = 3.0  # Repulsive force coefficient
+        Q_star = 10.0  # Distance threshold for repulsive force
+        waypoint_distance_threshold = 1.0
 
-        max_iterations = 100
+        max_iterations = 1000
         threshold = 0.5
 
-        for _ in range(max_iterations):
+        for iteration in range(max_iterations):
             force = np.zeros(2)
-            force += eta * (goal_position - current_position)
+            # Attractive force towards the goal
+            attractive_force = eta * (goal_position - current_position)
+            force += attractive_force
+
+            # Repulsive forces from obstacles
             for obstacle in self.moving_obstacles:
                 distance = euclidean(current_position, obstacle.position)
                 if distance < Q_star:
@@ -292,18 +313,39 @@ class Planner(Node):
                     force += repulsive_force
 
             # Update position
-            new_position = current_position + force * 1.0
+            new_position = current_position + force * 0.1
             if np.linalg.norm(new_position - goal_position) < threshold:
+                self.get_logger().info(f'Reached goal position at iteration {iteration}')
                 break
+
+            # Check if the new position is a significant waypoint
+            if np.linalg.norm(new_position - current_position) >= waypoint_distance_threshold:
+                path_point = PoseStamped()
+                path_point.header.stamp = path.header.stamp
+                path_point.header.frame_id = path.header.frame_id
+                path_point.pose.position.x = new_position[0]
+                path_point.pose.position.y = new_position[1]
+                path.poses.append(path_point)
+                self.waypoint_found = True
+                self.get_logger().info(f'Added waypoint at ({new_position[0]:.2f}, {new_position[1]:.2f})')
+
             current_position = new_position
-            path_point = PoseStamped()
-            path_point.header.stamp = path.header.stamp
-            path_point.header.frame_id = path.header.frame_id
-            path_point.pose.position.x = current_position[0]
-            path_point.pose.position.y = current_position[1]
-            path.poses.append(path_point)
+
+            # Stop if a free position is reached in the path
+            grid_position = self.world_to_grid(current_position)
+            if self.waypoint_found:
+                if 0 <= grid_position[0] < self.grid.shape[0] and 0 <= grid_position[1] < self.grid.shape[1]:
+                    if self.grid[grid_position[0], grid_position[1]] != 100:
+                        self.get_logger().info(f'Found free cell at grid position {grid_position}')
+                        break
+
+        # Log all the waypoints in the path
+        for pose in path.poses:
+            self.get_logger().info(f'Waypoint: ({pose.pose.position.x:.2f}, {pose.pose.position.y:.2f})')
 
         return path
+
+
 
 
 
