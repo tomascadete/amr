@@ -311,6 +311,19 @@ class Planner(Node):
         else:
             force_direction = np.array([0.0, 0.0])
 
+        # Check for parallell vectors and add a small deviation if needed
+        for obstacle in self.moving_obstacles:
+            predicted_direction = (obstacle.predicted_position - obstacle.position) / np.linalg.norm(obstacle.predicted_position - obstacle.position)
+            if np.linalg.norm(predicted_direction) > 0:
+                predicted_direction /= np.linalg.norm(predicted_direction)
+                dot_product = np.dot(force_direction, predicted_direction)
+                if abs(dot_product) > 0.99:
+                    # Add a small deviation to the force direction
+                    deviation = np.array([predicted_direction[1], -predicted_direction[0]]) * 0.05
+                    force_direction += deviation
+                    force_direction /= np.linalg.norm(force_direction)
+                    # self.get_logger().info('Forces are parallel, adding deviation')
+
         # Search for the first free cell in the direction of the force
         max_distance = 10.0
         step_size = self.resolution
@@ -337,8 +350,9 @@ class Planner(Node):
             path_point.pose.position.y = free_position[1]   
             path.poses.append(path_point)
 
-        # Log the waypoint
-        self.get_logger().info(f'Waypoint: ({path_point.pose.position.x:.2f}, {path_point.pose.position.y:.2f})')
+            # Log the waypoint
+            self.get_logger().info(f'Waypoint: ({path_point.pose.position.x:.2f}, {path_point.pose.position.y:.2f})')
+
 
         return path
 
