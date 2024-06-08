@@ -9,9 +9,10 @@ from amr_interfaces.msg import PredictionArray, Prediction, Emergency, LightColo
 from matplotlib import pyplot as plt
 
 class MovingObstacle:
-    def __init__(self, position, predicted_position):
+    def __init__(self, position, predicted_position, size):
         self.position = position
         self.predicted_position = predicted_position
+        self.size = size
 
 # Helper function: Douglas-Peucker Algorithm
 def douglas_peucker(points, epsilon):
@@ -59,8 +60,8 @@ class Planner(Node):
         self.started_crossing_flag = False
         self.waypoint_found = False
 
-        # plt.ion()
-        # self.fig, self.ax = plt.subplots()
+        plt.ion()
+        self.fig, self.ax = plt.subplots()
 
     def traffic_light_callback(self, msg):
         self.traffic_light_state = msg.colour
@@ -73,7 +74,8 @@ class Planner(Node):
         for prediction in msg.predictions:
             current_position = np.array([prediction.current_x, prediction.current_y])
             predicted_position = np.array([prediction.pred_x, prediction.pred_y])
-            self.moving_obstacles.append(MovingObstacle(current_position, predicted_position))
+            size = prediction.size
+            self.moving_obstacles.append(MovingObstacle(current_position, predicted_position, size))
             # self.get_logger().info(f'Current position: ({prediction.current_x:.2f}, {prediction.current_y:.2f}), Predicted position: ({prediction.pred_x:.2f}, {prediction.pred_y:.2f})')
 
     def odom_callback(self, msg):
@@ -116,32 +118,37 @@ class Planner(Node):
         for obstacle in self.moving_obstacles:
             current_grid_pos = self.world_to_grid(obstacle.position)
             predicted_grid_pos = self.world_to_grid(obstacle.predicted_position)
+            extra_cells_to_mark = int(obstacle.size / 2)
+            if extra_cells_to_mark < 1:
+                extra_cells_to_mark = 1
             # self.get_logger().info(f'Obstacle from {current_grid_pos} to {predicted_grid_pos} in grid coordinates')
-            self.mark_path_as_occupied(current_grid_pos, predicted_grid_pos)
+            self.mark_path_as_occupied(current_grid_pos, predicted_grid_pos, extra_cells_to_mark)
 
-        # self.update_plot()
+        self.update_plot()
 
-    # def update_plot(self):
-    #     if self.grid is None:
-    #         return
-    #     self.ax.clear()
-    #     self.ax.imshow(self.grid, cmap='gray', origin='lower')
-    #     self.ax.set_title('Occupancy Grid with Obstacles')
-    #     self.ax.set_xlabel('X')
-    #     self.ax.set_ylabel('Y')
-    #     plt.draw()
-    #     plt.pause(0.001)
+    def update_plot(self):
+        if self.grid is None:
+            return
+        self.ax.clear()
+        self.ax.imshow(self.grid, cmap='gray', origin='lower')
+        self.ax.set_title('Occupancy Grid with Obstacles')
+        self.ax.set_xlabel('X')
+        self.ax.set_ylabel('Y')
+        plt.draw()
+        plt.pause(0.001)
 
     def world_to_grid(self, world_position):
         grid_x = int((world_position[1] / self.resolution) + self.grid_origin[1])
         grid_y = int((world_position[0] / self.resolution) + self.grid_origin[0])
         return np.array([grid_x, grid_y])
 
-    def mark_path_as_occupied(self, start, end):
+    def mark_path_as_occupied(self, start, end, extra_cells_to_mark):
+        r_min = -extra_cells_to_mark
+        r_max = extra_cells_to_mark
         points = self.bresenham_line(start, end)
         for p in points:
-            for a in range(-3, 3):
-                for b in range(-3, 3):
+            for a in range(r_min, r_max):
+                for b in range(r_min, r_max):
                     if 0 <= p[0] + a < self.grid.shape[0] and 0 <= p[1] + b < self.grid.shape[1]:
                         self.grid[p[0] + a, p[1] + b] = 100
                         # self.get_logger().info(f'Grid updated at ({p[0] + a}, {p[1] + b})')
@@ -351,7 +358,7 @@ class Planner(Node):
             path.poses.append(path_point)
 
             # Log the waypoint
-            self.get_logger().info(f'Waypoint: ({path_point.pose.position.x:.2f}, {path_point.pose.position.y:.2f})')
+            # self.get_logger().info(f'Waypoint: ({path_point.pose.position.x:.2f}, {path_point.pose.position.y:.2f})')
 
 
         return path

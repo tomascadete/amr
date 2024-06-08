@@ -4,6 +4,7 @@ from nav_msgs.msg import Odometry, Path, OccupancyGrid
 from geometry_msgs.msg import PoseStamped
 import numpy as np
 from sklearn.cluster import DBSCAN
+from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
 from scipy.spatial.distance import euclidean
 import matplotlib.pyplot as plt
@@ -11,13 +12,13 @@ from amr_interfaces.msg import PredictionArray, Prediction
 
 
 class TrackedObject:
-    def __init__(self, obj_id, position, timestamp):
+    def __init__(self, obj_id, position, timestamp, size):
         self.id = obj_id
         self.positions = [position]
         self.timestamps = [timestamp]
         self.predicted_positions = []
         self.steps_since_seen = 0
-        self.size = 1.0
+        self.size = size
 
     def update(self, position, timestamp, size):
         self.positions.append(position)
@@ -90,12 +91,14 @@ class Predictor(Node):
             cluster_center = np.mean(cluster_indices, axis=0)
             world_x, world_y = (cluster_center[1] - self.grid_origin[1]) * self.resolution, (cluster_center[0] - self.grid_origin[0]) * self.resolution
             position = np.array([world_x, world_y])
-            # Estimate the size of the object
-            if len(cluster_indices) > 1:
-                size = np.max(np.linalg.norm(cluster_indices - cluster_center, axis=1))
-                # self.get_logger().info(f'Object size: {size}')
-            else:
-                size = 0.0
+
+            # Estimate the size of the object along both axes and take the larger of the two
+            pca = PCA(n_components=2)
+            pca.fit(cluster_indices)
+            size = np.max(pca.explained_variance_)
+            size = int(size * self.resolution)
+            # self.get_logger().info(f'Object with size {size}')
+
             
             matched = False
             for obj in self.tracked_objects:
@@ -105,7 +108,7 @@ class Predictor(Node):
                     break
 
             if not matched:
-                self.tracked_objects.append(TrackedObject(self.object_id, position, current_time))
+                self.tracked_objects.append(TrackedObject(self.object_id, position, current_time, size))
                 self.object_id += 1
 
         # Remove objects that haven't been seen for a while
@@ -127,6 +130,7 @@ class Predictor(Node):
                 prediction.current_y = obj.positions[-1][1]
                 prediction.pred_x = obj.predicted_positions[-1][0]
                 prediction.pred_y = obj.predicted_positions[-1][1]
+                prediction.size = obj.size
                 predictions.predictions.append(prediction)
         self.publisher_.publish(predictions)
 
