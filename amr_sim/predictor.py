@@ -17,10 +17,12 @@ class TrackedObject:
         self.timestamps = [timestamp]
         self.predicted_positions = []
         self.steps_since_seen = 0
+        self.size = 1.0
 
-    def update(self, position, timestamp):
+    def update(self, position, timestamp, size):
         self.positions.append(position)
         self.timestamps.append(timestamp)
+        self.size = size
         # Keep only a maximum of 20 positions
         if len(self.positions) > 20:
             self.positions.pop(0)
@@ -88,11 +90,17 @@ class Predictor(Node):
             cluster_center = np.mean(cluster_indices, axis=0)
             world_x, world_y = (cluster_center[1] - self.grid_origin[1]) * self.resolution, (cluster_center[0] - self.grid_origin[0]) * self.resolution
             position = np.array([world_x, world_y])
+            # Estimate the size of the object
+            if len(cluster_indices) > 1:
+                size = np.max(np.linalg.norm(cluster_indices - cluster_center, axis=1))
+                # self.get_logger().info(f'Object size: {size}')
+            else:
+                size = 0.0
             
             matched = False
             for obj in self.tracked_objects:
                 if euclidean(position, obj.positions[-1]) < 1.0:
-                    obj.update(position, current_time)
+                    obj.update(position, current_time, size)
                     matched = True
                     break
 
