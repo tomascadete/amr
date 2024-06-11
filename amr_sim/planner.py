@@ -105,6 +105,9 @@ class Planner(Node):
         self.grid = np.array(msg.data).reshape((msg.info.height, msg.info.width))
         self.grid_origin = np.array([msg.info.width / 2, msg.info.height / 2])
 
+        # Expand the occupied cells to account for the robot's size
+        self.expand_occupied_cells()
+
         # Mark the road area as occupied if self.planning_active is true and not started crossing
         if self.planning_active and not self.started_crossing_flag:
             x_min_grid = int((12.5 - msg.info.origin.position.x) / msg.info.resolution)
@@ -128,6 +131,20 @@ class Planner(Node):
             self.mark_path_as_occupied(current_grid_pos, predicted_grid_pos, extra_cells_to_mark)
 
         self.update_plot()
+
+
+    def expand_occupied_cells(self):
+        expanded_grid = self.grid.copy()
+        for i in range(self.grid.shape[0]):
+            for j in range(self.grid.shape[1]):
+                if self.grid[i, j] == 100:
+                    for di in range(-3, 3):
+                        for dj in range(-3, 3):
+                            if 0 <= i + di < self.grid.shape[0] and 0 <= j + dj < self.grid.shape[1]:
+                                expanded_grid[i + di, j + dj] = 100
+
+        self.grid = expanded_grid
+
 
     def update_plot(self):
         if self.grid is None:
