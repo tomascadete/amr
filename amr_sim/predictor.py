@@ -92,12 +92,14 @@ class Predictor(Node):
             world_x, world_y = (cluster_center[1] - self.grid_origin[1]) * self.resolution, (cluster_center[0] - self.grid_origin[0]) * self.resolution
             position = np.array([world_x, world_y])
 
-            # Estimate the size of the object along both axes and take the larger of the two
-            pca = PCA(n_components=2)
-            pca.fit(cluster_indices)
-            size = np.max(pca.explained_variance_)
-            size = int(size * self.resolution)
-            # self.get_logger().info(f'Object with size {size}')
+            # Calculate bounding box
+            min_coords = np.min(cluster_indices, axis=0)
+            max_coords = np.max(cluster_indices, axis=0)
+            width = (max_coords[1] - min_coords[1]) * self.resolution
+            height = (max_coords[0] - min_coords[0]) * self.resolution
+            # self.get_logger().info(f'Width: {width}, Height: {height}')
+            # Size is the larger of the two dimensions
+            size = int(max(width, height))
 
             
             matched = False

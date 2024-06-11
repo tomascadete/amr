@@ -118,9 +118,12 @@ class Planner(Node):
         for obstacle in self.moving_obstacles:
             current_grid_pos = self.world_to_grid(obstacle.position)
             predicted_grid_pos = self.world_to_grid(obstacle.predicted_position)
-            extra_cells_to_mark = int(obstacle.size / 2)
+            extra_cells_to_mark = int(obstacle.size / self.resolution)
+            # Extra cells to mark should be at least 1 and smaller than 4
             if extra_cells_to_mark < 1:
                 extra_cells_to_mark = 1
+            elif extra_cells_to_mark > 4:
+                extra_cells_to_mark = 4
             # self.get_logger().info(f'Obstacle from {current_grid_pos} to {predicted_grid_pos} in grid coordinates')
             self.mark_path_as_occupied(current_grid_pos, predicted_grid_pos, extra_cells_to_mark)
 
@@ -297,8 +300,8 @@ class Planner(Node):
         path.header.stamp = self.get_clock().now().to_msg()
         path.header.frame_id = "map"
 
-        eta = 1.0  # Attractive force coefficient
-        zeta = 10.0  # Repulsive force coefficient
+        eta = 0.5  # Attractive force coefficient
+        zeta = 20.0  # Repulsive force coefficient
         Q_star = 10.0  # Distance threshold for repulsive force
 
         force = np.zeros(2)
