@@ -200,13 +200,14 @@ class Planner(Node):
 
         robot_distance_to_crosswalk = np.linalg.norm(self.robot_pose - self.crosswalk_entry)
         if self.grid[start] == 100 and robot_distance_to_crosswalk > 1.0:
-            self.get_logger().warn('Robot is in an obstacle')
-            msg = Emergency()
-            msg.emergency_state = 1
-            self.emergency_publisher.publish(msg)
+            # self.get_logger().warn('Robot is in an obstacles trajectory')
+
             apf_path = self.generate_apf_path()
             if apf_path is not None:
-                self.publisher_.publish(apf_path)                
+                self.publisher_.publish(apf_path)       
+                msg = Emergency()
+                msg.emergency_state = 1
+                self.emergency_publisher.publish(msg)         
                 # Log all the waypoints in the path
                 # for pose in apf_path.poses:
                 #     self.get_logger().info(f'Waypoint: ({pose.pose.position.x:.2f}, {pose.pose.position.y:.2f})')
@@ -300,8 +301,8 @@ class Planner(Node):
         path.header.stamp = self.get_clock().now().to_msg()
         path.header.frame_id = "map"
 
-        eta = 0.5  # Attractive force coefficient
-        zeta = 20.0  # Repulsive force coefficient
+        eta = 1.0  # Attractive force coefficient
+        zeta = 5.0  # Repulsive force coefficient
         Q_star = 10.0  # Distance threshold for repulsive force
 
         force = np.zeros(2)

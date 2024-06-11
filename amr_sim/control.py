@@ -17,7 +17,7 @@ class Controller(Node):
         self.current_path = []
         self.current_pose = None
         self.align_to_zero = False
-        self.waypoint_threshold = 0.5  # meters
+        self.waypoint_threshold = 0.1
         self.angular_threshold = np.pi / 6  # radians
         self.linear_speed = 3.5     # Maximum linear speed
         self.angular_speed = np.pi * 2  # Maximum angular speed
@@ -27,8 +27,8 @@ class Controller(Node):
     def emergency_callback(self, msg):
         if msg.emergency_state == 1:
             self.emergency_state = True
-            self.linear_speed = 6.0
-            self.angular_threshold = np.pi / 3
+            self.linear_speed = 5.0
+            self.angular_threshold = np.pi / 2
         elif msg.emergency_state == 0:
             self.emergency_state = False
             self.linear_speed = 3.5
@@ -80,7 +80,7 @@ class Controller(Node):
         angle_error = abs(angle_diff)
         if angle_error < self.angular_threshold:
             scale = 1 - (angle_error / self.angular_threshold)  # Scale speed based on angle error
-            twist.linear.x = self.linear_speed * scale
+            twist.linear.x = min(self.linear_speed * scale * distance, self.linear_speed * scale)
         twist.angular.z = np.clip(angle_diff, -self.angular_speed, self.angular_speed)
 
         self.publisher_vel.publish(twist)

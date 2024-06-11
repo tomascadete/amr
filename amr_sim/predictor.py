@@ -98,8 +98,7 @@ class Predictor(Node):
             width = (max_coords[1] - min_coords[1]) * self.resolution
             height = (max_coords[0] - min_coords[0]) * self.resolution
             # self.get_logger().info(f'Width: {width}, Height: {height}')
-            # Size is the larger of the two dimensions
-            size = int(max(width, height))
+            size = int(np.sqrt(width**2 + height**2))
 
             
             matched = False

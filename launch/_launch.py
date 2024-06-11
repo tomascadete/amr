@@ -24,10 +24,10 @@ def generate_launch_description():
             package='amr_sim',
             executable='traffic_light_detection',
             name='traffic_light_detection'),
-        # launch_ros.actions.Node(
-        #     package='amr_sim',
-        #     executable='trajectory_plotter',
-        #     name='trajectory_plotter'),
+        launch_ros.actions.Node(
+            package='amr_sim',
+            executable='trajectory_plotter',
+            name='trajectory_plotter'),
         launch_ros.actions.Node(
             package='amr_sim',
             executable='predictor',
