@@ -122,7 +122,7 @@ class Planner(Node):
             current_grid_pos = self.world_to_grid(obstacle.position)
             predicted_grid_pos = self.world_to_grid(obstacle.predicted_position)
             extra_cells_to_mark = int(obstacle.size / self.resolution)
-            # Extra cells to mark should be at least 1 and smaller than 4
+            # Extra cells to mark should be at least 1 and smaller than 5
             if extra_cells_to_mark < 1:
                 extra_cells_to_mark = 1
             elif extra_cells_to_mark > 4:
@@ -138,8 +138,8 @@ class Planner(Node):
         for i in range(self.grid.shape[0]):
             for j in range(self.grid.shape[1]):
                 if self.grid[i, j] == 100:
-                    for di in range(-3, 3):
-                        for dj in range(-3, 3):
+                    for di in range(-4, 4):
+                        for dj in range(-4, 4):
                             if 0 <= i + di < self.grid.shape[0] and 0 <= j + dj < self.grid.shape[1]:
                                 expanded_grid[i + di, j + dj] = 100
 
